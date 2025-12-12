@@ -3,7 +3,7 @@ from converter_regiosport import excel_to_txt_regiosport
 from converter_amateur import excel_to_txt_amateur
 
 # Nieuw: Cue Print -> Cue Web (HTML) converter
-from converter_amateur_online import cueprint_txt_to_cueweb_html
+from converter_amateur_online_opt2 import cueprint_txt_to_cueweb_html
 
 # Voor sjablonen
 from openpyxl import Workbook
