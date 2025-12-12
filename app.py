@@ -69,7 +69,7 @@ def convert_amateur_online():
     return Response(
         content_out,
         mimetype="text/plain; charset=utf-8",
-        headers={"Content-Disposition": "attachment; filename=cue_web_export_amateur.html"},
+        headers={"Content-Disposition": "attachment; filename=cue_web_export_amateur.txt"},
     )
 
 
