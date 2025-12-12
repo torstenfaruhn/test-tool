@@ -1,11 +1,10 @@
-from flask import Flask, render_template, request, Response, abort, send_file
+from flask import Flask, render_template, request, Response, abort
 from converter_regiosport import excel_to_txt_regiosport
 from converter_amateur import excel_to_txt_amateur
 
-# Nieuw: Cue Print -> Cue Web (HTML) converter
-from converter_amateur_online_opt2 import cueprint_txt_to_cueweb_html
+# Cue Print -> Cue Web converter (Optie 1: volledige classnamen)
+from converter_amateur_online import cueprint_txt_to_cueweb_html
 
-# Voor sjablonen
 from openpyxl import Workbook
 import io
 
@@ -57,15 +56,27 @@ def convert_amateur():
 
 @app.post("/convert/amateur-online")
 def convert_amateur_online():
-    """Converteer Cue Print-uitvoer (txt) naar Cue Web HTML-code."""
+    """Converteer Cue Print-uitvoer (txt) naar Cue Web HTML-code (als tekstbestand)."""
     file = request.files.get("file_amateur_online")
     if not file or file.filename == "":
         return abort(400, "Geen bestand geüpload (Amateurvoetbal online).")
+
     try:
-        content_in = file.read().decode("utf-8", errors="replace")
+        raw = file.read()
+
+        # .xlsx (en veel ZIP-bestanden) beginnen met PK\x03\x04; voorkom onbruikbare output.
+        if raw.startswith(b"PK\x03\x04"):
+            return abort(
+                400,
+                "Verkeerd bestand: dit lijkt een Excelbestand (.xlsx). Upload een Cue Print-tekstbestand (.txt).",
+            )
+
+        content_in = raw.decode("utf-8", errors="replace")
         content_out = cueprint_txt_to_cueweb_html(content_in)
     except Exception as e:
         return abort(400, f"Kon Amateurvoetbal online-bestand niet verwerken: {e}")
+
+    # Let op: inhoud is HTML-code, maar we leveren het als .txt (kopieerbaar/plakbaar).
     return Response(
         content_out,
         mimetype="text/plain; charset=utf-8",
@@ -84,12 +95,8 @@ def _xls_bytes_from_workbook(wb: Workbook) -> bytes:
     return bio.getvalue()
 
 
-
-
 # -----------------------------
-# Main
+# Main (alleen voor lokaal testen)
 # -----------------------------
 if __name__ == "__main__":
-    # Voor lokaal testen:
-    # python app.py -> http://localhost:8000
     app.run(host="0.0.0.0", port=8000, debug=False)
