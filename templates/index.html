@@ -20,64 +20,48 @@
     <main class="container">
       <!-- AMATEUR (split row) -->
       <section class="card-row">
-        <!-- AMATEUR (links - bestaand) -->
+        <!-- AMATEUR (links - bestaand, ongewijzigd) -->
         <section class="card">
-          <div class="card__head">
-            <h3>Amateurvoetbal</h3>
-            <p>
-              Upload het ingevulde Excelbestand (.xlsx). Klik daarna op de knop hieronder. Je krijgt dan een
-              txt-bestand dat je in CUE moet plakken.
-            </p>
-          </div>
+        <div class="card__head">
+          <h3>Amateurvoetbal</h3>
+          <p>Upload het ingevulde Excelbestand (.xlsx). Klik daarna op de knop hieronder. Je krijgt dan een txt-bestand dat je in CUE moet plakken.</p>
+        </div>
 
-          <form
-            action="/convert/amateur"
-            method="post"
-            enctype="multipart/form-data"
-            class="upload js-convert"
-            data-target="amateur-output"
-            data-filename="cue_export_amateur.txt"
-            data-error-target="amateur-error"
-          >
-            <label class="file btn-like" data-filepicker>
-              <input type="file" name="file_amateur" accept=".xlsx" required />
-              <span class="file__label">Bestand kiezen</span>
-            </label>
-            <button type="submit" class="btn btn-primary btn-like">Maak CUE export (.txt)</button>
-          </form>
+        <form action="/convert/amateur" method="post" enctype="multipart/form-data"
+              class="upload js-convert"
+              data-target="amateur-output"
+              data-filename="cue_export_amateur.txt">
+          <label class="file btn-like" data-filepicker>
+            <input type="file" name="file_amateur" accept=".xlsx" required />
+            <span class="file__label">Bestand kiezen</span>
+          </label>
+          <button type="submit" class="btn btn-primary btn-like">Maak CUE export (.txt)</button>
+        </form>
 
-          <p id="amateur-error" class="form-error" role="alert" aria-live="polite"></p>
+        <!-- verborgen opslag voor gekeerde tekst -->
+        <textarea id="amateur-output" class="visually-hidden" aria-hidden="true"></textarea>
 
-          <textarea id="amateur-output" class="visually-hidden" aria-hidden="true"></textarea>
-
-          <div class="actions actions--bottom">
-            <a
-              class="btn btn-outline"
-              href="/static/docs/AMA_uitslagen%20amateuvoetbal%202025-2026%20definitief.xlsx"
-              download
-            >
-              Download leeg invoerdocument
-            </a>
-            <button class="btn btn-outline copy-btn" data-target="amateur-output">Kopieer direct de code</button>
-          </div>
+        <div class="actions actions--bottom">
+          <a class="btn btn-outline" href="/static/docs/AMA_uitslagen%20amateuvoetbal%202025-2026%20definitief.xlsx" download>
+            Download leeg invoerdocument
+          </a>
+          <button class="btn btn-outline copy-btn" data-target="amateur-output">
+            Kopieer direct de code
+          </button>
+        </div>
         </section>
 
-        <!-- AMATEUR ONLINE (rechts) -->
+        <!-- AMATEUR ONLINE (rechts - nieuw) -->
         <section class="card">
           <div class="card__head">
             <h3>Amateurvoetbal online</h3>
             <p>Upload hier het tekstbestand met Cue Print-code met daarin de uitslagen van de recente speelronde.</p>
           </div>
 
-          <form
-            action="/convert/amateur-online"
-            method="post"
-            enctype="multipart/form-data"
-            class="upload js-convert"
-            data-target="amateur-online-output"
-            data-filename="cue_web_export_amateur.txt"
-            data-error-target="amateur-online-error"
-          >
+          <form action="/convert/amateur-online" method="post" enctype="multipart/form-data"
+                class="upload js-convert"
+                data-target="amateur-online-output"
+                data-filename="cue_web_export_amateur.txt">
             <label class="file btn-like" data-filepicker>
               <input type="file" name="file_amateur_online" accept=".txt" required />
               <span class="file__label">Bestand kiezen</span>
@@ -85,17 +69,14 @@
             <button type="submit" class="btn btn-primary btn-like">Maak Cue-Web export</button>
           </form>
 
-          <p id="amateur-online-error" class="form-error" role="alert" aria-live="polite"></p>
-
           <textarea id="amateur-online-output" class="visually-hidden" aria-hidden="true"></textarea>
 
           <div class="actions actions--bottom">
-            <button
-              class="btn btn-outline download-btn"
-              data-target="amateur-online-output"
-              data-filename="cue_web_export_amateur.txt"
-            >
+            <button class="btn btn-outline download-btn" data-target="amateur-online-output" data-filename="cue_web_export_amateur.txt">
               Download Cue Web-code (txt)
+            </button>
+            <button class="btn btn-outline copy-btn" data-target="amateur-online-output">
+              Kopieer direct de code
             </button>
           </div>
         </section>
@@ -105,21 +86,13 @@
       <section class="card">
         <div class="card__head">
           <h3>Regiosport</h3>
-          <p>
-            Upload het ingevulde Excelbestand (.xlsx). Klik daarna op de knop hieronder. Je krijgt dan een txt-bestand
-            dat je in CUE moet plakken.
-          </p>
+        <p>Upload het ingevulde Excelbestand (.xlsx). Klik daarna op de knop hieronder. Je krijgt dan een txt-bestand dat je in CUE moet plakken.</p>
         </div>
 
-        <form
-          action="/convert/regiosport"
-          method="post"
-          enctype="multipart/form-data"
-          class="upload js-convert"
-          data-target="regiosport-output"
-          data-filename="cue_export_regiosport.txt"
-          data-error-target="regiosport-error"
-        >
+        <form action="/convert/regiosport" method="post" enctype="multipart/form-data"
+              class="upload js-convert"
+              data-target="regiosport-output"
+              data-filename="cue_export_regiosport.txt">
           <label class="file btn-like" data-filepicker>
             <input type="file" name="file_regio" accept=".xlsx" required />
             <span class="file__label">Bestand kiezen</span>
@@ -127,15 +100,16 @@
           <button type="submit" class="btn btn-primary btn-like">Maak CUE export (.txt)</button>
         </form>
 
-        <p id="regiosport-error" class="form-error" role="alert" aria-live="polite"></p>
-
+        <!-- verborgen opslag voor gekeerde tekst -->
         <textarea id="regiosport-output" class="visually-hidden" aria-hidden="true"></textarea>
 
         <div class="actions actions--bottom">
           <a class="btn btn-outline" href="/static/docs/Uitslagen%20regiosport%20202-2026%20definitief.xlsx" download>
             Download leeg invoerdocument
           </a>
-          <button class="btn btn-outline copy-btn" data-target="regiosport-output">Kopieer direct de code</button>
+          <button class="btn btn-outline copy-btn" data-target="regiosport-output">
+            Kopieer direct de code
+          </button>
         </div>
       </section>
 
@@ -144,34 +118,22 @@
 
     <script>
       // File-knop: groene state bij file-selectie
-      document.querySelectorAll('[data-filepicker] input[type="file"]').forEach((input) => {
-        input.addEventListener("change", () => {
-          const wrap = input.closest("[data-filepicker]");
-          wrap?.classList.toggle("selected", input.files && input.files.length > 0);
+      document.querySelectorAll('[data-filepicker] input[type="file"]').forEach(input => {
+        input.addEventListener('change', () => {
+          const wrap = input.closest('[data-filepicker]');
+          wrap?.classList.toggle('selected', input.files && input.files.length > 0);
         });
       });
 
-      function setFormError(form, message) {
-        const errorId = form.dataset.errorTarget;
-        const el = errorId ? document.getElementById(errorId) : null;
-        if (el) el.textContent = message || "";
-      }
-
-      // Intercepteer submit: vraag de output via fetch op, download zelf en sla op in verborgen textarea
-      document.querySelectorAll("form.js-convert").forEach((form) => {
+      // Intercepteer submit: vraag de TXT via fetch op, download zelf en sla op in verborgen textarea
+      document.querySelectorAll("form.js-convert").forEach(form => {
         form.addEventListener("submit", async (e) => {
           e.preventDefault();
-          setFormError(form, "");
-
           const submitBtn = form.querySelector('button[type="submit"]');
-          const targetId = form.dataset.target;
+          const targetId  = form.dataset.target;
           const fileInput = form.querySelector('input[type="file"]');
-          const filename = form.dataset.filename || "export.txt";
-
-          if (!fileInput?.files?.length) {
-            setFormError(form, "Kies eerst een bestand.");
-            return;
-          }
+          const filename  = form.dataset.filename || "export.txt";
+          if (!fileInput?.files?.length) { alert("Kies eerst een bestand."); return; }
 
           submitBtn.disabled = true;
           const originalText = submitBtn.textContent;
@@ -182,34 +144,21 @@
             const res = await fetch(form.action, { method: "POST", body: fd });
             const text = await res.text();
 
-            if (!res.ok) {
-              // Toon servermelding (bijv. verkeerd bestandstype)
-              setFormError(form, text || "Er ging iets mis. Controleer je upload.");
-              submitBtn.textContent = originalText;
-              return;
-            }
-
             // Sla op in verborgen textarea voor 'Kopieer direct de code'
             const ta = document.getElementById(targetId);
             if (ta) ta.value = text;
 
-            // Download als tekstbestand (inhoud kan HTML-code bevatten)
+            // Download als bestand
             const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            setTimeout(() => {
-              URL.revokeObjectURL(url);
-              a.remove();
-            }, 0);
+            const url  = URL.createObjectURL(blob);
+            const a    = document.createElement("a");
+            a.href = url; a.download = filename;
+            document.body.appendChild(a); a.click();
+            setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
 
             submitBtn.textContent = "Klaar!";
-            setTimeout(() => (submitBtn.textContent = originalText), 1500);
+            setTimeout(() => submitBtn.textContent = originalText, 1500);
           } catch (err) {
-            setFormError(form, "Er ging iets mis tijdens het converteren. Probeer opnieuw.");
             alert("Er ging iets mis tijdens het converteren: " + err);
           } finally {
             submitBtn.disabled = false;
@@ -218,12 +167,12 @@
       });
 
       // Kopieer direct de code
-      document.querySelectorAll(".copy-btn").forEach((btn) => {
+      document.querySelectorAll(".copy-btn").forEach(btn => {
         btn.addEventListener("click", async () => {
           const targetId = btn.dataset.target;
           const outputEl = document.getElementById(targetId);
           if (!outputEl || !outputEl.value) {
-            alert("Nog geen code beschikbaar! Maak eerst de export.");
+            alert("Nog geen CUE-code beschikbaar! Maak eerst de export.");
             return;
           }
           try {
@@ -243,7 +192,7 @@
       });
 
       // Download Cue Web-code (client-side) vanuit verborgen textarea
-      document.querySelectorAll(".download-btn").forEach((btn) => {
+      document.querySelectorAll(".download-btn").forEach(btn => {
         btn.addEventListener("click", () => {
           const targetId = btn.dataset.target;
           const filename = btn.dataset.filename || "export.txt";
@@ -253,29 +202,24 @@
             return;
           }
           const blob = new Blob([outputEl.value], { type: "text/plain;charset=utf-8" });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = filename;
-          document.body.appendChild(a);
-          a.click();
-          setTimeout(() => {
-            URL.revokeObjectURL(url);
-            a.remove();
-          }, 0);
+          const url  = URL.createObjectURL(blob);
+          const a    = document.createElement("a");
+          a.href = url; a.download = filename;
+          document.body.appendChild(a); a.click();
+          setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
         });
       });
 
       // Donkere modus op tijd: actief vanaf 17:00 Europe/Amsterdam
-      function setTimedTheme() {
-        try {
-          const fmt = new Intl.DateTimeFormat("nl-NL", { hour: "numeric", hour12: false, timeZone: "Europe/Amsterdam" });
-          const hour = parseInt(fmt.formatToParts(new Date()).find((p) => p.type === "hour").value, 10);
-          document.documentElement.classList.toggle("dark", hour >= 17);
-        } catch (e) {}
+      function setTimedTheme(){
+        try{
+          const fmt = new Intl.DateTimeFormat('nl-NL',{hour:'numeric', hour12:false, timeZone:'Europe/Amsterdam'});
+          const hour = parseInt(fmt.formatToParts(new Date()).find(p=>p.type==='hour').value,10);
+          document.documentElement.classList.toggle('dark', hour >= 17);
+        }catch(e){}
       }
       setTimedTheme();
-      setInterval(setTimedTheme, 15 * 60 * 1000);
+      setInterval(setTimedTheme, 15*60*1000);
     </script>
   </body>
 </html>
