@@ -26,3 +26,12 @@ python app.py  # http://localhost:8000
 - `templates/index.html` – gecombineerde UI met twee blokken.
 - `static/style.css` – stijlen.
 - `notebooks/` – referentie-notebooks (niet gebruikt door de app).
+
+## Amateurvoetbal online (Cue Print -> Cue Web)
+
+De converter voor **Amateurvoetbal online** zet een Cue Print `.txt` om naar Cue Web **HTML-code** en levert die bewust uit als **.txt-bestand** (kopieerbaar/plakbaar).
+
+### Definitieve keuze: “Optie 1” (volledige classnamen)
+We gebruiken in `converter_amateur_online.py` de **volledige class-attributen** (zoals uit het werkende notebook). Dit is bewust zo gedaan omdat de doelomgeving de markup/styling het meest betrouwbaar herkent wanneer de classnamen exact overeenkomen met de notebook-output.
+
+Een eerdere “Optie 2” (minimalistische markup zonder hashed classnamen) is verwijderd om verwarring te voorkomen.
