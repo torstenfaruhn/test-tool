@@ -18,10 +18,9 @@
     </section>
 
     <main class="container">
-      <!-- AMATEUR (split row) -->
-      <section class="card-row">
-        <!-- AMATEUR (links - bestaand, ongewijzigd) -->
-        <section class="card">
+      <!-- BLOKKEN -->
+      <section class="card-grid">
+<section class="card">
         <div class="card__head">
           <h3>Amateurvoetbal: Excel > Cue Print</h3>
           <p>Upload het ingevulde Excelbestand (.xlsx) met de uitslagen. Klik daarna op de knop hieronder. Je krijgt dan een txt-bestand dat je in Cue Print (Codefixer) moet plakken.</p>
@@ -51,8 +50,8 @@
         </div>
         </section>
 
-        <!-- AMATEUR ONLINE (rechts - nieuw) -->
-        <section class="card">
+        
+<section class="card">
           <div class="card__head">
             <h3>Amateurvoetbal: Cue Print > Cue Web</h3>
             <p>Upload hier het tekstbestand met Cue Print-code met daarin de uitslagen. Je krijgt dan een tekstbestand waarvan je de inhoud in een html-blok in Cue Web moet plakken.</p>
@@ -80,10 +79,8 @@
             </button>
           </div>
         </section>
-      </section>
-
-      <!-- REGIOSPORT -->
-      <section class="card">
+      
+<section class="card">
         <div class="card__head">
           <h3>Regiosport: Excel > Cue Print</h3>
         <p>Upload het ingevulde Excelbestand (.xlsx). Klik daarna op de knop hieronder. Je krijgt dan een txt-bestand dat je in Cue Print (Codefixer) moet plakken.</p>
@@ -113,7 +110,44 @@
         </div>
       </section>
 
-      <footer>&copy; DL/MHNL 2025</footer>
+      
+
+        <section class="card">
+          <div class="card__head">
+            <h3>Amateurvoetbal: topscorers tekstbestand &gt; Cue Web</h3>
+            <p>
+              Upload hier het tekstbestand (Word of Kladblok) met de topscorers. Je krijgt dan een tekstbestand waarvan je de inhoud in
+              een html-blok in Cue Web moet plakken.
+            </p>
+          </div>
+
+          <form action="/convert/topscorers" method="post" enctype="multipart/form-data"
+                class="upload js-convert"
+                data-target="topscorers-output"
+                data-filename="cue_web_export_topscorers.txt">
+            <label class="file btn-like" data-filepicker>
+              <input type="file" name="file_topscorers" accept=".txt,.docx" required />
+              <span class="file__label">Bestand kiezen</span>
+            </label>
+            <button type="submit" class="btn btn-primary btn-like">Maak Cue Web-export</button>
+          </form>
+
+          <textarea id="topscorers-output" class="visually-hidden" aria-hidden="true"></textarea>
+
+          <div class="actions actions--bottom">
+            <button class="btn btn-outline download-btn" data-target="topscorers-output"
+                    data-filename="cue_web_export_topscorers.txt">
+              Download Cue Web-code (txt)
+            </button>
+            <button class="btn btn-outline copy-btn" data-target="topscorers-output">
+              Kopieer direct de code
+            </button>
+          </div>
+        </section>
+
+      </section>
+
+<footer>&copy; DL/MHNL 2025</footer>
     </main>
 
     <script>
@@ -143,6 +177,12 @@
             const fd = new FormData(form);
             const res = await fetch(form.action, { method: "POST", body: fd });
             const text = await res.text();
+
+            if (!res.ok) {
+              alert(text || "Er ging iets mis. Controleer je upload.");
+              submitBtn.textContent = originalText;
+              return;
+            }
 
             // Sla op in verborgen textarea voor 'Kopieer direct de code'
             const ta = document.getElementById(targetId);
