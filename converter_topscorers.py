@@ -1,19 +1,21 @@
-"""Amateurvoetbal topscorers: tekstbestand (.txt/.docx) -> Cue Web HTML-code.
+"""Amateurvoetbal topscorers: .txt/.docx -> Cue Web HTML-code (als tekstbestand).
 
-Gebaseerd op notebook:
-`12 klassement_html_converter_v12 - integratie docx.ipynb`.
+Doel:
+- Toon alle divisies/klassen als aparte secties.
+- Maak per sectie een genummerde lijst (<ol>) met correcte <li>-items.
+- Escape alle tekst correct (HTML-encoding) en gebruik <br> voor regels binnen één item.
 
-De output is HTML-code die als tekst (.txt) wordt aangeboden zodat deze eenvoudig te kopiëren/plakken is.
+Belangrijk voor Word (.docx):
+- In het aangeleverde Word-document staat de rangnummering niet als '1.' in de tekst.
+- In plaats daarvan begint een nieuw 'rank-blok' bij regels met '- <N> doelpunten'.
+  (De daaropvolgende regels zonder doelpunten horen bij diezelfde rank.)
 
-Deze versie herstelt twee issues die in de repository-variant problemen gaven:
-- Geen afgekorte '...' class strings in templates.
-- Robuuste nummerherkenning (met/zonder punt) én betere DOCX-extractie (Word-nummering).
+Deze converter volgt die logica en werkt ook met .txt-input die wel '1.' of '1 ' voor rangen bevat.
 """
 
 from __future__ import annotations
 
 import html as _html
-import io
 import re
 import tempfile
 from typing import List, Tuple
@@ -25,88 +27,74 @@ from docx import Document
 # Templates (Cue Web)
 # =========================
 
-# Kop boven een sectie (bijv. "Eerste klasse")
-# NB: In Cue Web worden deze classes vaak als "hashed" gebruikt; we nemen hier een volledige (niet-afgekorte) variant op.
+# Sectietitel (bijv. 'Eerste klasse', 'Derde en Vierde divisie')
 HEADING_TEMPLATE = (
     '<h4 class="Heading_heading__okScq Heading_heading--sm__bGPWw heading_sm__u3F2n" '
     'data-testid="article-subhead">{title}</h4>'
 )
 
-# Genummerde lijst template. We houden <ol>/<li> minimaal (stabiel), en gebruiken de volledige Paragraph classes.
-TEMPLATE_HTML = (
-    '<ol data-testid="numbered-list">\n'
-    '<li>\n'
-    '<p class="Paragraph_paragraph__exhQA Paragraph_paragraph--default-sm-default__jy0uG articleParagraph">{content}</p>\n'
-    '</li>\n'
-    '</ol>'
+# Ordered list: houd dit bewust "simpel" en stabiel; Cue Web kan dit in een HTML-blok renderen.
+OL_OPEN = '<ol data-testid="numbered-list">'
+OL_CLOSE = '</ol>'
+
+LI_TEMPLATE = (
+    '<li>'
+    '<p class="Paragraph_paragraph__exhQA Paragraph_paragraph--default-sm-default__jy0uG articleParagraph">{content}</p>'
+    '</li>'
 )
-
-
-def parse_html_template(template_text: str) -> Tuple[str, str, str]:
-    """Splits een <ol> template op in: prefix, item_template, suffix.
-
-    item_template bevat {content} als placeholder voor de inhoud.
-    """
-    m_ol = re.search(r"(<ol[^>]*>)(.*?)(</ol>)", template_text, re.S | re.I)
-    if not m_ol:
-        raise ValueError("Kon geen <ol>...</ol> in het sjabloon vinden.")
-
-    prefix = template_text[: m_ol.start(2)]
-    suffix = template_text[m_ol.end(2) :]
-
-    m_li = re.search(r"(<li\b.*?</li>)", m_ol.group(2), re.S | re.I)
-    if not m_li:
-        raise ValueError("Kon geen <li>...</li> in het sjabloon vinden.")
-
-    item_template = m_li.group(1)
-    if "{content}" not in item_template:
-        raise ValueError("Het <li>-sjabloon bevat geen {content} placeholder.")
-
-    return prefix, item_template, suffix
-
-
-_OL_PREFIX, _ITEM_TEMPLATE, _OL_SUFFIX = parse_html_template(TEMPLATE_HTML)
 
 
 # =========================
 # Parsing helpers
 # =========================
 
-# Rangregel: accepteer '1 ' en '1. ' (met/zonder punt)
-NUMBER_RE = re.compile(r"^\s*\d+(?:\.)?\s+")
+# Rangregel als die in txt al genummerd is: accepteer '1 ' en '1. '
+NUMBER_RE = re.compile(r'^\s*(\d+)(?:\.)?\s+')
+
+# Start van een nieuw rank-blok: "- 11 doelpunten"
+GOALS_RE = re.compile(r'-\s*(\d+)\s*doelpunten\b', re.IGNORECASE)
 
 
 def strip_source_rank_number(line: str) -> str:
-    """Verwijder een eventueel rangnummer aan het begin van de regel (met/zonder punt)."""
-    return re.sub(r"^\s*\d+(?:\.)?\s*", "", line, count=1)
+    return re.sub(r'^\s*\d+(?:\.)?\s*', '', line, count=1)
 
 
 def is_section_heading(text: str) -> bool:
-    """Heuristiek: detecteer sectiekoppen zoals 'Eerste klasse', 'Tweede klasse', etc."""
-    t = (text or "").strip()
+    """Detecteer sectiekoppen.
+
+    In jouw input zien we o.a.:
+    - 'Derde en Vierde divisie'
+    - 'Eerste klasse', 'Tweede klasse', etc.
+
+    We willen niet per ongeluk spelersregels als heading markeren
+    (die bevatten vaak '(' of '- N doelpunten').
+    """
+    t = (text or '').strip()
     if not t:
         return False
 
-    # Veelvoorkomend: 'Eerste klasse', 'Tweede klasse', 'Derde klasse', etc.
-    if re.search(r"\bklasse\b", t, flags=re.I):
+    if re.search(r'\b(klasse|klassen|divisie|divisies)\b', t, flags=re.IGNORECASE):
+        if '(' in t:
+            return False
+        if GOALS_RE.search(t):
+            return False
+        if len(t) > 80:
+            return False
         return True
 
-    # Ook koppen als 'DERDE DIVISIE B' (caps) moeten als heading worden gezien.
-    # Heuristiek: geen leidend nummer én relatief kort én veel uppercase.
-    if not NUMBER_RE.match(t):
-        letters = re.sub(r"[^A-Za-zÀ-ÿ]", "", t)
-        if letters and len(t) <= 40:
-            upper_ratio = sum(1 for ch in letters if ch.isupper()) / max(1, len(letters))
-            if upper_ratio >= 0.8:
-                return True
+    # Extra fallback: korte caps-headings (bv. 'DERDE DIVISIE B')
+    letters = re.sub(r'[^A-Za-zÀ-ÿ]', '', t)
+    if letters and len(t) <= 50:
+        upper_ratio = sum(1 for ch in letters if ch.isupper()) / max(1, len(letters))
+        if upper_ratio >= 0.8 and not '(' in t and not GOALS_RE.search(t):
+            return True
 
     return False
 
 
 def _escape_and_join_lines(lines: List[str]) -> str:
-    """Escape tekst en zet multi-line content om naar HTML met <br>."""
     safe = [_html.escape(ln.strip()) for ln in lines if ln.strip()]
-    return "<br>".join(safe)
+    return '<br>'.join(safe)
 
 
 # =========================
@@ -114,59 +102,35 @@ def _escape_and_join_lines(lines: List[str]) -> str:
 # =========================
 
 def extract_text_from_upload(raw: bytes, filename: str) -> str:
-    """Lees upload (.txt of .docx) en geef de tekstinhoud terug.
+    """Lees upload (.txt of .docx) en geef de tekstinhoud terug."""
+    name = (filename or '').lower()
 
-    Belangrijk: bij DOCX staat het lijstnummer vaak niet in paragraph.text.
-    We detecteren daarom Word-numbering en voegen een '1. ' prefix toe per sectie.
-    """
-    name = (filename or "").lower()
-
-    if name.endswith(".docx"):
-        with tempfile.NamedTemporaryFile(suffix=".docx", delete=True) as tmp:
+    if name.endswith('.docx'):
+        with tempfile.NamedTemporaryFile(suffix='.docx', delete=True) as tmp:
             tmp.write(raw)
             tmp.flush()
             doc = Document(tmp.name)
 
+            # Neem alle paragrafen mee als losse regels.
             lines: List[str] = []
-            list_counter = 0
-
             for p in doc.paragraphs:
-                text = (p.text or "").strip()
-                if not text:
-                    continue
+                txt = (p.text or '').strip()
+                if txt:
+                    lines.append(txt)
 
-                # Sectiekop -> reset numbering
-                if is_section_heading(text):
-                    list_counter = 0
-                    lines.append(text)
-                    continue
-
-                # Detecteer Word numbering: numPr aanwezig op pPr
-                has_numbering = (
-                    getattr(p, "_p", None) is not None
-                    and getattr(p._p, "pPr", None) is not None
-                    and getattr(p._p.pPr, "numPr", None) is not None
-                )
-
-                if has_numbering:
-                    list_counter += 1
-                    lines.append(f"{list_counter}. {text}")
-                else:
-                    lines.append(text)
-
-            # Tabellen (indien gebruikt)
+            # Tabellen (indien aanwezig)
             for table in doc.tables:
                 for row in table.rows:
                     for cell in row.cells:
-                        for ln in (cell.text or "").splitlines():
+                        for ln in (cell.text or '').splitlines():
                             t = ln.strip()
                             if t:
                                 lines.append(t)
 
-            return "\n".join(lines).strip()
+            return '\n'.join(lines).strip()
 
     # default: txt
-    return raw.decode("utf-8", errors="replace")
+    return raw.decode('utf-8', errors='replace')
 
 
 # =========================
@@ -174,14 +138,10 @@ def extract_text_from_upload(raw: bytes, filename: str) -> str:
 # =========================
 
 def topscorers_text_to_cueweb_html(content: str) -> str:
-    """Converteer topscorers-tekst naar Cue Web HTML-code (als tekst).
+    """Converteer topscorers-tekst naar Cue Web HTML-code (als tekst)."""
+    raw_lines = [ln.rstrip() for ln in (content or '').splitlines()]
 
-    Verwacht input met sectiekoppen en genummerde regels.
-    Subregels (zonder nummer) worden aan de vorige rang toegevoegd.
-    """
-    lines = [ln.rstrip() for ln in (content or "").splitlines()]
     sections: List[Tuple[str, List[List[str]]]] = []
-
     current_title: str | None = None
     current_items: List[List[str]] = []
     current_group: List[str] = []
@@ -194,48 +154,64 @@ def topscorers_text_to_cueweb_html(content: str) -> str:
 
     def flush_section() -> None:
         nonlocal current_title, current_items
-        if current_title and current_items:
-            sections.append((current_title, current_items))
+        if current_title:
+            # ook als er (per ongeluk) geen items zijn, willen we de heading niet kwijt,
+            # maar in praktijk verwachten we items.
+            if current_items:
+                sections.append((current_title, current_items))
+            else:
+                sections.append((current_title, []))
         current_title = None
         current_items = []
 
-    for raw_line in lines:
-        line = (raw_line or "").strip()
+    for raw in raw_lines:
+        line = (raw or '').strip()
         if not line:
+            continue
+
+        # Skip algemene titel bovenaan, als die vóór de eerste echte sectie staat
+        if current_title is None and line.lower().startswith('tussenstand'):
             continue
 
         if is_section_heading(line):
             flush_group()
             flush_section()
-            current_title = line.strip()
+            current_title = line
             continue
 
-        if NUMBER_RE.match(line):
+        # Start nieuw rank-blok:
+        # 1) Als de bron expliciet genummerd is (txt)
+        # 2) Of als er een '- N doelpunten' in de regel staat (docx/txt)
+        if NUMBER_RE.match(line) or GOALS_RE.search(line):
             flush_group()
             current_group = [strip_source_rank_number(line)]
+            continue
+
+        # Subregel (zelfde rank)
+        if not current_group:
+            # fallback: begin een group als er nog geen rank gestart is
+            current_group = [line]
         else:
-            if not current_group:
-                # Als er geen actieve groep is, begin een groep (fallback)
-                current_group = [line]
-            else:
-                current_group.append(line)
+            current_group.append(line)
 
     flush_group()
     flush_section()
 
     # Render HTML
     out: List[str] = []
+
     for title, items in sections:
         out.append(HEADING_TEMPLATE.format(title=_html.escape(title.strip())))
 
-        # ordered list
-        out.append(_OL_PREFIX)
-        for group in items:
-            content_html = _escape_and_join_lines(group)
-            out.append(_ITEM_TEMPLATE.format(content=content_html))
-        out.append(_OL_SUFFIX)
+        if items:
+            out.append(OL_OPEN)
+            for group in items:
+                out.append(LI_TEMPLATE.format(content=_escape_and_join_lines(group)))
+            out.append(OL_CLOSE)
+        else:
+            # Geen items gevonden (zou zelden moeten); laat in elk geval de heading zien.
+            out.append('<p class="Paragraph_paragraph__exhQA Paragraph_paragraph--default-sm-default__jy0uG articleParagraph"></p>')
 
-        # kleine spacer tussen secties
-        out.append("<br>")
+        out.append('<br>')
 
-    return "\n".join(out).strip()
+    return '\n'.join(out).strip()
