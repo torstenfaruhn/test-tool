@@ -175,4 +175,15 @@ html.dark .file{ color:#000; }         /* ook zwart in dark mode bij witte knop 
   overflow:hidden; clip:rect(0 0 0 0); clip-path:inset(50%); white-space:nowrap;
 }
 
+.form-error{
+  margin: .75rem 0 0;
+  color: #b00020;
+  font-weight: 600;
+}
+html.dark .form-error{
+  color: #ff6b6b;
+}
+
+
 footer{ margin-top:.25rem; color:var(--muted); text-align:center; font-size:.9rem; }
+
