@@ -81,7 +81,7 @@ html,body{
 }
 .card{
   width:100%;
-  max-width:900px;           /* uniforme breedte voor beide kaarten */
+  max-width: 1100px;           /* uniforme breedte voor beide kaarten */
   background:var(--card);
   border:1px solid var(--outline);
   border-radius:16px;
@@ -113,6 +113,7 @@ html,body{
   padding:.65rem 1rem; border-radius:12px; font-weight:600; cursor:pointer; transition:.15s ease;
   display:inline-flex; align-items:center; justify-content:center; text-decoration:none;
   min-width:var(--btn-width);
+  width:var(--btn-width);
   font-size:var(--btn-font);
   line-height:1.1;
   text-align:center;
@@ -132,11 +133,14 @@ html,body{
 
 /* ---------- UPLOAD ---------- */
 .upload{
-  display:flex;
+  display:grid;
+  grid-template-columns: repeat(2, var(--btn-width));
   gap:.9rem;
-  flex-wrap:wrap;
+  justify-content:center;
   align-items:center;
-  justify-content:center;              /* bovenste knoppen centreren */
+}
+@media (max-width: 520px){
+  .upload{ grid-template-columns: 1fr; }
 }
 
 /* ---------- 'Bestand kiezen'-knop ---------- */
@@ -145,6 +149,7 @@ html,body{
   border:1px solid var(--outline); border-radius:12px; padding:.6rem 1rem;
   background:#fff; cursor:pointer; transition:.15s ease; color:#000; /* zwart bij wit */
   min-width:var(--btn-width);
+  width:var(--btn-width);
   font-size:var(--btn-font);
   line-height:1.1;
   text-align:center;
@@ -161,12 +166,14 @@ html.dark .file{ color:#000; }         /* ook zwart in dark mode bij witte knop 
 
 /* ---------- onder de forms ---------- */
 .actions{
-  margin:1rem 0 0; display:flex; justify-content:center; gap:.75rem; flex-wrap:wrap;
+  margin:1rem 0 0;
+  display:grid;
+  grid-template-columns: repeat(2, var(--btn-width));
+  gap:.75rem;
+  justify-content:center;
 }
-.actions--bottom .btn{
-  flex: 0 0 var(--btn-width);
-  font-size:var(--btn-font);
-  text-align:center;
+@media (max-width: 520px){
+  .actions{ grid-template-columns: 1fr; }
 }
 
 /* helper */
@@ -175,15 +182,4 @@ html.dark .file{ color:#000; }         /* ook zwart in dark mode bij witte knop 
   overflow:hidden; clip:rect(0 0 0 0); clip-path:inset(50%); white-space:nowrap;
 }
 
-.form-error{
-  margin: .75rem 0 0;
-  color: #b00020;
-  font-weight: 600;
-}
-html.dark .form-error{
-  color: #ff6b6b;
-}
-
-
 footer{ margin-top:.25rem; color:var(--muted); text-align:center; font-size:.9rem; }
-
