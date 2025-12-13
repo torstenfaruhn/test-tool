@@ -12,21 +12,21 @@
       <img src="/static/img/hero.jpg" alt="" class="hero__img" />
       <img src="/static/img/logo.png" alt="DL/MHNL" class="hero__logo" />
       <div class="hero__overlay">
-        <h1>Maak hier je Cue-export voor online en print</h1>
-        <p>Gebruik deze portal om exports te maken van Excel naar Cue Print of van Cue Print naar Cue Web.</p>
+        <h1>Maak snel je CUE-export</h1>
+        <p>Upload een ingevuld Excelbestand of download eerst een leeg sjabloon.</p>
       </div>
     </section>
 
     <main class="container">
       <!-- AMATEUR (split row) -->
       <section class="card-row">
-        <!-- AMATEUR (links - bestaand, ongewijzigd) -->
+        <!-- AMATEUR (links - bestaand) -->
         <section class="card">
           <div class="card__head">
-            <h3>Amateurvoetbal: Excel > Cue Print</h3>
+            <h3>Amateurvoetbal</h3>
             <p>
-              Upload het ingevulde Excelbestand (.xlsx) met de uitslagen. Klik daarna op de knop hieronder. Je krijgt dan
-              een txt-bestand dat je in Cue Print (Codefixer) moet plakken.
+              Upload het ingevulde Excelbestand (.xlsx). Klik daarna op de knop hieronder. Je krijgt dan een
+              txt-bestand dat je in CUE moet plakken.
             </p>
           </div>
 
@@ -37,15 +37,17 @@
             class="upload js-convert"
             data-target="amateur-output"
             data-filename="cue_export_amateur.txt"
+            data-error-target="amateur-error"
           >
             <label class="file btn-like" data-filepicker>
               <input type="file" name="file_amateur" accept=".xlsx" required />
               <span class="file__label">Bestand kiezen</span>
             </label>
-            <button type="submit" class="btn btn-primary btn-like">Maak Cue Print-export (.txt)</button>
+            <button type="submit" class="btn btn-primary btn-like">Maak CUE export (.txt)</button>
           </form>
 
-          <!-- verborgen opslag voor gekeerde tekst -->
+          <p id="amateur-error" class="form-error" role="alert" aria-live="polite"></p>
+
           <textarea id="amateur-output" class="visually-hidden" aria-hidden="true"></textarea>
 
           <div class="actions actions--bottom">
@@ -60,11 +62,11 @@
           </div>
         </section>
 
-        <!-- AMATEUR ONLINE (rechts - nieuw) -->
+        <!-- AMATEUR ONLINE (rechts) -->
         <section class="card">
           <div class="card__head">
-            <h3>Amateurvoetbal: Cue Print > Cue Web</h3>
-            <p>Upload hier het tekstbestand met Cue Print-code, met daarin de uitslagen Je krijgt dan een tekstbestand waarvan je de inhoud in een html-blok in Cue Web kunt plaatsen.</p>
+            <h3>Amateurvoetbal online</h3>
+            <p>Upload hier het tekstbestand met Cue Print-code met daarin de uitslagen van de recente speelronde.</p>
           </div>
 
           <form
@@ -74,6 +76,7 @@
             class="upload js-convert"
             data-target="amateur-online-output"
             data-filename="cue_web_export_amateur.txt"
+            data-error-target="amateur-online-error"
           >
             <label class="file btn-like" data-filepicker>
               <input type="file" name="file_amateur_online" accept=".txt" required />
@@ -81,6 +84,8 @@
             </label>
             <button type="submit" class="btn btn-primary btn-like">Maak Cue-Web export</button>
           </form>
+
+          <p id="amateur-online-error" class="form-error" role="alert" aria-live="polite"></p>
 
           <textarea id="amateur-online-output" class="visually-hidden" aria-hidden="true"></textarea>
 
@@ -99,10 +104,10 @@
       <!-- REGIOSPORT -->
       <section class="card">
         <div class="card__head">
-          <h3>Regiosport Excel > Cue Print</h3>
+          <h3>Regiosport</h3>
           <p>
-            Upload het ingevulde Excelbestand (.xlsx) met uitslagen. Klik daarna op de knop hieronder. Je krijgt dan een txt-bestand
-            dat je in Cue Print (Codefixer) moet plakken.
+            Upload het ingevulde Excelbestand (.xlsx). Klik daarna op de knop hieronder. Je krijgt dan een txt-bestand
+            dat je in CUE moet plakken.
           </p>
         </div>
 
@@ -113,15 +118,17 @@
           class="upload js-convert"
           data-target="regiosport-output"
           data-filename="cue_export_regiosport.txt"
+          data-error-target="regiosport-error"
         >
           <label class="file btn-like" data-filepicker>
             <input type="file" name="file_regio" accept=".xlsx" required />
             <span class="file__label">Bestand kiezen</span>
           </label>
-          <button type="submit" class="btn btn-primary btn-like">Maak Cue Print-export (.txt)</button>
+          <button type="submit" class="btn btn-primary btn-like">Maak CUE export (.txt)</button>
         </form>
 
-        <!-- verborgen opslag voor gekeerde tekst -->
+        <p id="regiosport-error" class="form-error" role="alert" aria-live="polite"></p>
+
         <textarea id="regiosport-output" class="visually-hidden" aria-hidden="true"></textarea>
 
         <div class="actions actions--bottom">
@@ -144,16 +151,25 @@
         });
       });
 
+      function setFormError(form, message) {
+        const errorId = form.dataset.errorTarget;
+        const el = errorId ? document.getElementById(errorId) : null;
+        if (el) el.textContent = message || "";
+      }
+
       // Intercepteer submit: vraag de output via fetch op, download zelf en sla op in verborgen textarea
       document.querySelectorAll("form.js-convert").forEach((form) => {
         form.addEventListener("submit", async (e) => {
           e.preventDefault();
+          setFormError(form, "");
+
           const submitBtn = form.querySelector('button[type="submit"]');
           const targetId = form.dataset.target;
           const fileInput = form.querySelector('input[type="file"]');
           const filename = form.dataset.filename || "export.txt";
+
           if (!fileInput?.files?.length) {
-            alert("Kies eerst een bestand.");
+            setFormError(form, "Kies eerst een bestand.");
             return;
           }
 
@@ -165,6 +181,13 @@
             const fd = new FormData(form);
             const res = await fetch(form.action, { method: "POST", body: fd });
             const text = await res.text();
+
+            if (!res.ok) {
+              // Toon servermelding (bijv. verkeerd bestandstype)
+              setFormError(form, text || "Er ging iets mis. Controleer je upload.");
+              submitBtn.textContent = originalText;
+              return;
+            }
 
             // Sla op in verborgen textarea voor 'Kopieer direct de code'
             const ta = document.getElementById(targetId);
@@ -186,6 +209,7 @@
             submitBtn.textContent = "Klaar!";
             setTimeout(() => (submitBtn.textContent = originalText), 1500);
           } catch (err) {
+            setFormError(form, "Er ging iets mis tijdens het converteren. Probeer opnieuw.");
             alert("Er ging iets mis tijdens het converteren: " + err);
           } finally {
             submitBtn.disabled = false;
@@ -199,7 +223,7 @@
           const targetId = btn.dataset.target;
           const outputEl = document.getElementById(targetId);
           if (!outputEl || !outputEl.value) {
-            alert("Nog geen CUE-code beschikbaar! Maak eerst de export.");
+            alert("Nog geen code beschikbaar! Maak eerst de export.");
             return;
           }
           try {
