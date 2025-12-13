@@ -4,6 +4,7 @@ from converter_amateur import excel_to_txt_amateur
 
 # Cue Print -> Cue Web converter (Optie 1: volledige classnamen)
 from converter_amateur_online import cueprint_txt_to_cueweb_html
+from converter_topscorers import extract_text_from_upload, topscorers_text_to_cueweb_html
 
 from openpyxl import Workbook
 import io
@@ -93,6 +94,35 @@ def _xls_bytes_from_workbook(wb: Workbook) -> bytes:
     wb.save(bio)
     bio.seek(0)
     return bio.getvalue()
+
+
+@app.post("/convert/topscorers")
+def convert_topscorers():
+    """Converteer topscorers-tekst (.txt/.docx) naar Cue Web HTML-code (als .txt voor copy/paste)."""
+    file = request.files.get("file_topscorers")
+    if not file or file.filename == "":
+        return abort(400, "Geen bestand geüpload (Topscorers).")
+
+    try:
+        raw = file.read()
+
+        # prevent obvious wrong uploads (.xlsx / zip)
+        if raw.startswith(b"PK\x03\x04") and not (file.filename or "").lower().endswith(".docx"):
+            return abort(
+                400,
+                "Verkeerd bestand: dit lijkt geen .txt of .docx. Upload een tekstbestand (Word of Kladblok).",
+            )
+
+        text_in = extract_text_from_upload(raw, file.filename or "")
+        html_out = topscorers_text_to_cueweb_html(text_in)
+    except Exception as e:
+        return abort(400, f"Kon topscorers-bestand niet verwerken: {e}")
+
+    return Response(
+        html_out,
+        mimetype="text/plain; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=cue_web_export_topscorers.txt"},
+    )
 
 
 # -----------------------------
