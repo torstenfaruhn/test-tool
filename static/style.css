@@ -91,6 +91,24 @@ html,body{
 }
 
 /* ---------- AMATEUR split row (2 kolommen op desktop, stack op mobiel) ---------- */
+.card-grid{
+  width:100%;
+  max-width:1100px;
+  margin:0 auto 0.9rem;
+  display:grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap:0.9rem;
+  align-items:stretch;
+}
+.card-grid .card{
+  max-width:none;
+}
+@media (max-width: 920px){
+  .card-grid{
+    grid-template-columns: 1fr;
+  }
+}
+
 .card-row{
   width:100%;
   max-width:1100px;
