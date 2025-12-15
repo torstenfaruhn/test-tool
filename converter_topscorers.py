@@ -1,194 +1,291 @@
-"""Amateurvoetbal topscorers: .docx/.txt -> Cue Web HTML-code (geleverd als .txt).
+#!/usr/bin/env python3
+"""
+converter_topscorers.py
 
 Doel
-- Converteer een Word/Kladblok topscorers-overzicht naar Cue Web HTML-code.
-- Cue Web herkent de “numbered list” alleen met specifieke classes/data-testid.
-  Daarom zijn de tussenkop- en list-templates hieronder hardcoded overgenomen uit
-  `12 klassement_html_converter_v12 - integratie docx.ipynb` (geen versimpeling).
+-----
+Zet een Word-bestand (.docx) of tekstbestand (.txt) met een topscorers-overzicht om
+naar HTML. De output bestaat per klasse/divisie uit:
 
-Belangrijkste fixes t.o.v. eerdere repo-versies
-- Alle secties (divisies + alle klassen) worden meegenomen: geen ‘stil’ wegvallen na 2 secties.
-- Lijst-items worden herkend op basis van het patroon “- N doelpunt(en)”, niet op “1.” nummering
-  (Word-nummering zit vaak niet in paragraph.text).
-- Numbered list markup blijft intact (ol/li/p classes + data-testid).
-- Alle inhoud wordt HTML-escaped; regels binnen één item worden met <br> samengevoegd.
+1) Een heading (HEADING_TEMPLATE)
+2) Een genummerde lijst (TEMPLATE_HTML) met <li>-items waarin spelersregels staan.
+   Gelijke standen worden binnen één <li> samengevoegd met "<br>\n".
+
+Belangrijk
+----------
+- TEMPLATE_HTML en HEADING_TEMPLATE zijn 1-op-1 overgenomen uit het oorspronkelijke notebook.
+- De HTML-strings worden NIET afgekort of vereenvoudigd.
+- Sectiekoppen worden herkend op "klasse/divisie", maar spelerregels met "(..., ... divisie)"
+  mogen niet als kop worden gezien (anders verdwijnt o.a. "Derde en Vierde divisie").
+
+Dependency
+----------
+    pip install python-docx
 """
 
 from __future__ import annotations
 
-import html as _html
+import argparse
 import re
-import tempfile
-from typing import List, Tuple
+import sys
+from pathlib import Path
+from typing import List, Tuple, Optional
 
-from docx import Document
+import html as _html
+
+try:
+    from docx import Document  # type: ignore
+except Exception:  # pragma: no cover
+    Document = None  # type: ignore
 
 
-# -----------------------------
-# Hardcoded Cue Web templates (uit notebook)
-# -----------------------------
+# Ingebouwd HTML-sjabloon voor de genummerde lijst (EXACT uit notebook)
+TEMPLATE_HTML = """<ol data-testid="numbered-list" class="List_list__TqiC5 List_list--ordered__jhPJG styles_list__7BMph styles_orderedList__wTCQI">
+
+<li class="List_list-item__G_gHo">
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="Icon_icon__SKejO Icon_icon--md__JEKjB List_list-item__icon__uA9Ih" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6"></path></svg>
+
+<p class="Paragraph_paragraph__exhQA Paragraph_paragraph--default-sm-default__jy0uG articleParagraph">speler 1</p>
+
+</li>
+
+<li class="List_list-item__G_gHo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="Icon_icon__SKejO Icon_icon--md__JEKjB List_list-item__icon__uA9Ih" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6"></path></svg><p class="Paragraph_paragraph__exhQA Paragraph_paragraph--default-sm-default__jy0uG articleParagraph">speler 2<br>
+speler 3</p>
+
+</li>
+
+</ol>"""
+
+# HTML-heading voor klasse/divisie-koppen (EXACT uit notebook)
 HEADING_TEMPLATE = (
     '<h4 class="Heading_heading__okScq Heading_heading--sm__bGPWw '
     'heading_articleSubheading__HfjIx heading_sm__u3F2n" '
     'data-testid="article-subhead">{title}</h4>'
 )
 
-OL_OPEN = (
-    '<ol data-testid="numbered-list" '
-    'class="List_list__TqiC5 List_list--ordered__jhPJG styles_list__7BMph styles_orderedList__wTCQI">'
-)
-OL_CLOSE = "</ol>"
-
-LI_TEMPLATE = (
-    '<li class="List_list-item__G_gHo">'
-    '<p class="Paragraph_paragraph__exhQA Paragraph_paragraph--default-sm-default__jy0uG articleParagraph">{content}</p>'
-    "</li>"
-)
-
-# -----------------------------
-# Parsing regex / heuristiek
-# -----------------------------
-
-# Item-start: eindigt (meestal) op “- N doelpunt(en)”
-# We maken dit bewust tolerant: doelpunt/doelpunten, met/zonder extra spaties.
-POINTS_RE = re.compile(r"\s-\s*\d+\s+doelpunt(?:en)?\s*$", flags=re.IGNORECASE)
-
-# Sectiekop: bevat “klasse” of “divisie” (ook combinaties zoals “Derde en Vierde divisie”)
-SECTION_RE = re.compile(r"\b(klasse|divisie)\b", flags=re.IGNORECASE)
+NUMBER_RE = re.compile(r"^\s*\d+\.\s")
 
 
-def is_section_heading(line: str) -> bool:
-    t = (line or "").strip()
-    if not t:
-        return False
+def parse_html_template(template_text: str) -> Tuple[str, str, str]:
+    """
+    Splitst TEMPLATE_HTML in:
+    - prefix: alles t/m opening <ol> + eventuele whitespace vóór de eerste <li> inhoud
+    - item_template: een volledig <li>..</li> met {content} op de plek van <p>inhoud
+    - suffix: rest t/m </ol>
+    """
+    m_ol = re.search(r"(<ol[^>]*>)(.*?)(</ol>)", template_text, re.S)
+    if not m_ol:
+        raise ValueError("Kon geen <ol>...</ol> in het sjabloon vinden.")
+    prefix = template_text[: m_ol.start(2)]
+    suffix = template_text[m_ol.end(2):]
 
-    if SECTION_RE.search(t):
+    m_li = re.search(r"(<li\b.*?</li>)", m_ol.group(2), re.S)
+    if not m_li:
+        raise ValueError("Kon geen <li> in het sjabloon vinden.")
+    li_block = m_li.group(1)
+
+    m_p = re.search(r"(<p\b[^>]*>)(.*?)(</p>)", li_block, re.S)
+    if not m_p:
+        raise ValueError("Kon geen <p> in het <li>-sjabloon vinden.")
+    p_open, _, p_close = m_p.groups()
+
+    item_template = li_block[: m_p.start()] + p_open + "{content}" + p_close + li_block[m_p.end():]
+    return prefix, item_template, suffix
+
+
+def looks_like_player_stat_line(line: str) -> bool:
+    """
+    Notebook-logica:
+    - spelerregels bevatten vaak (TEAM, ... divisie) en/of '- X doelpunten'
+    Deze moeten NIET als sectiekop worden gezien.
+    """
+    s = line.strip()
+    lower = s.lower()
+    if "(" in s and ")" in s:
         return True
-
-    # Extra: korte CAPS koppen (soms gebruikt voor divisies zonder het woord 'divisie')
-    # bv. "DERDE DIVISIE B" valt al onder SECTION_RE; deze is extra defensief.
-    if not re.search(r"\d", t):
-        letters = re.sub(r"[^A-Za-zÀ-ÿ]", "", t)
-        if letters and len(t) <= 50:
-            upper_ratio = sum(1 for ch in letters if ch.isupper()) / max(1, len(letters))
-            if upper_ratio >= 0.85:
-                return True
-
+    if "-" in s and re.search(r"\b\d+\b", s) and "doelpunt" in lower:
+        return True
     return False
 
 
-def extract_lines_from_upload(raw: bytes, filename: str) -> List[str]:
-    """Lees upload (.txt of .docx) en retourneer een genormaliseerde lijst regels."""
-    name = (filename or "").lower()
+def is_section_heading(line: str) -> bool:
+    """
+    Notebook-logica (aangepast aan docx output):
+    - niet leeg
+    - niet genummerd (1., 2., ...)
+    - bevat 'klasse' of 'divisie'
+    - maar lijkt niet op spelerregel
+    """
+    s = line.strip()
+    if not s:
+        return False
+    if NUMBER_RE.match(s):
+        return False
 
+    upper = s.upper()
+    if "KLASSE" not in upper and "DIVISIE" not in upper:
+        return False
+    if looks_like_player_stat_line(s):
+        return False
+    return True
+
+
+def strip_source_rank_number(line: str) -> str:
+    return re.sub(r"^\s*\d+\.\s*", "", line, count=1)
+
+
+def extract_text_lines_from_docx(path: Path) -> List[str]:
+    if Document is None:
+        raise RuntimeError("python-docx is niet beschikbaar. Installeer met: pip install python-docx")
+
+    doc = Document(str(path))
     lines: List[str] = []
 
-    if name.endswith(".docx"):
-        # docx is zip; daarom niet blokkeren op PK...
-        with tempfile.NamedTemporaryFile(suffix=".docx", delete=True) as tmp:
-            tmp.write(raw)
-            tmp.flush()
-            doc = Document(tmp.name)
+    # paragrafen
+    for p in doc.paragraphs:
+        lines.append(p.text)
 
-            for p in doc.paragraphs:
-                t = (p.text or "").strip()
-                if t:
-                    lines.append(t)
+    # tabellen (voor de zekerheid)
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                lines.extend(cell.text.splitlines())
 
-            # Tabellen (voor het geval de bron in een tabel staat)
-            for table in doc.tables:
-                for row in table.rows:
-                    for cell in row.cells:
-                        for ln in (cell.text or "").splitlines():
-                            tt = ln.strip()
-                            if tt:
-                                lines.append(tt)
-
-        return lines
-
-    # default: txt
-    text = raw.decode("utf-8", errors="replace")
-    for ln in text.splitlines():
-        t = (ln or "").strip()
-        if t:
-            lines.append(t)
-    return lines
+    # behoud lege regels als scheiding, maar strip \r\n
+    return [l.rstrip("\n") for l in lines]
 
 
-def build_sections(lines: List[str]) -> List[Tuple[str, List[List[str]]]]:
-    """Zet regels om naar secties: (titel, [ [itemregel1, subregel2, ...], ... ])"""
+def extract_text_lines_from_txt(path: Path) -> List[str]:
+    raw = path.read_bytes()
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        text = raw.decode("cp1252")
+    return text.splitlines()
+
+
+def parse_sections_from_lines(lines: List[str]) -> List[Tuple[str, List[List[str]]]]:
+    """
+    Notebook-structuur:
+    - sectiekoppen (klasse/divisie)
+    - binnen sectie: groepen gescheiden door lege regels
+      waarbij een groep 1 of meer regels bevat (gelijke stand -> meerdere regels)
+    """
     sections: List[Tuple[str, List[List[str]]]] = []
+    current_title: Optional[str] = None
+    current_groups: List[List[str]] = []
+    current_group: List[str] = []
+    started = False
 
-    current_title: str | None = None
-    current_items: List[List[str]] = []
-    current_item: List[str] = []
+    def flush_group():
+        nonlocal current_group
+        if current_group:
+            # strip eventueel "1. " etc, maar behoud inhoud verder intact
+            cleaned: List[str] = []
+            for l in current_group:
+                if NUMBER_RE.match(l):
+                    cleaned.append(strip_source_rank_number(l))
+                else:
+                    cleaned.append(l)
+            current_groups.append(cleaned)
+            current_group = []
 
-    def flush_item() -> None:
-        nonlocal current_item, current_items
-        if current_item:
-            current_items.append(current_item)
-            current_item = []
+    def flush_section():
+        nonlocal current_groups, current_title
+        if current_title and current_groups:
+            sections.append((current_title, current_groups))
+        current_groups = []
 
-    def flush_section() -> None:
-        nonlocal current_title, current_items
-        if current_title is not None:
-            # Voeg ook lege secties toe? In praktijk beter: alleen als er items zijn.
-            if current_items:
-                sections.append((current_title, current_items))
-        current_title = None
-        current_items = []
-
-    for line in lines:
-        # Sla een algemene titel over, als die bovenaan staat (bijv. "Tussenstand Topscorers")
-        # Dit voorkomt een "lege sectie" die later verwarring kan geven.
-        if current_title is None and not current_items and not current_item:
-            if not is_section_heading(line) and line.lower().startswith("tussenstand"):
-                continue
+    for raw in lines:
+        line = (raw or "").rstrip("\n").strip()
 
         if is_section_heading(line):
-            flush_item()
+            flush_group()
             flush_section()
-            current_title = line.strip()
+            current_title = line
+            started = True
             continue
 
-        # Binnen sectie: item-start obv "- N doelpunten"
-        if POINTS_RE.search(line):
-            flush_item()
-            current_item = [line.strip()]
-        else:
-            if not current_item:
-                # Fallback: als de bron onvoorzien is, start toch een item
-                current_item = [line.strip()]
-            else:
-                current_item.append(line.strip())
+        if not started:
+            # alles vóór de eerste sectiekop negeren (documenttitel e.d.)
+            continue
 
-    flush_item()
+        if not line:
+            flush_group()
+            continue
+
+        current_group.append(line)
+
+    flush_group()
     flush_section()
-
     return sections
 
 
-def render_sections_to_cueweb_html(sections: List[Tuple[str, List[List[str]]]]) -> str:
-    out: List[str] = []
+def apply_template(template_text: str, sections: List[Tuple[str, List[List[str]]]]) -> str:
+    prefix, item_template, suffix = parse_html_template(template_text)
+    html_parts: List[str] = []
 
-    for title, items in sections:
-        out.append(HEADING_TEMPLATE.format(title=_html.escape(title)))
+    for title, groups in sections:
+        html_parts.append(HEADING_TEMPLATE.format(title=_html.escape(title)))
 
-        out.append(OL_OPEN)
-        for item_lines in items:
-            # escape + <br>
-            safe = [_html.escape(x) for x in item_lines if x.strip()]
-            content = "<br>\n".join(safe)
-            out.append(LI_TEMPLATE.format(content=content))
-        out.append(OL_CLOSE)
+        items: List[str] = []
+        for group in groups:
+            # Escape per regel; gelijkstand: <br>\n
+            safe_lines = [_html.escape(l, quote=False) for l in group]
+            inner = "<br>\n".join(safe_lines)
+            items.append(item_template.replace("{content}", inner))
 
-        out.append("<br>")  # spacer tussen secties
+        html_parts.append(prefix + "\n" + "\n\n".join(items) + "\n" + suffix)
 
-    return "\n".join(out).strip()
+    return "\n\n".join(html_parts)
 
 
-def convert_topscorers_upload(raw: bytes, filename: str) -> str:
-    """Wrapper voor app.py."""
-    lines = extract_lines_from_upload(raw, filename)
-    sections = build_sections(lines)
-    return render_sections_to_cueweb_html(sections)
+def convert_file(input_path: Path) -> str:
+    if not input_path.exists():
+        raise FileNotFoundError(f"Bestand bestaat niet: {input_path}")
+
+    suffix = input_path.suffix.lower()
+    if suffix == ".docx":
+        lines = extract_text_lines_from_docx(input_path)
+    else:
+        lines = extract_text_lines_from_txt(input_path)
+
+    sections = parse_sections_from_lines(lines)
+    if not sections:
+        raise ValueError(
+            "Geen secties gevonden. Verwacht minstens één regel met 'klasse' of 'divisie' als kop."
+        )
+
+    return apply_template(TEMPLATE_HTML, sections)
+
+
+def build_arg_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        description="Converteer topscorers-stand (.docx/.txt) naar HTML in een tekstbestand."
+    )
+    p.add_argument("input", help="Pad naar inputbestand (.docx of .txt)")
+    p.add_argument(
+        "-o", "--output",
+        help="Pad naar outputbestand (default: <input_stem>_output_html.txt)"
+    )
+    return p
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    args = build_arg_parser().parse_args(argv)
+
+    in_path = Path(args.input).expanduser().resolve()
+    html_out = convert_file(in_path)
+
+    out_path = Path(args.output).expanduser().resolve() if args.output else in_path.with_name(
+        f"{in_path.stem}_output_html.txt"
+    )
+
+    out_path.write_text(html_out, encoding="utf-8")
+    print(f"Gereed: {out_path}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
