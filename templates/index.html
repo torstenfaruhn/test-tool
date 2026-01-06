@@ -151,6 +151,49 @@
     </main>
 
     <script>
+      // Haal bestandsnaam uit Content-Disposition (server) voor dynamische naamgeving
+      function filenameFromContentDisposition(res){
+        const cd = res.headers.get('Content-Disposition') || res.headers.get('content-disposition');
+        if (!cd) return null;
+
+        // RFC 5987 / RFC 6266: filename*=UTF-8''...
+        const star = cd.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+        if (star && star[1]) {
+          try { return decodeURIComponent(star[1].trim()); } catch(e) { return star[1].trim(); }
+        }
+
+        const normal = cd.match(/filename\s*=\s*"?([^";]+)"?/i);
+        return normal && normal[1] ? normal[1].trim() : null;
+      }
+
+      function yyyymmddAmsterdam(){
+        // Gebruik Europe/Amsterdam zodat de datum gelijk loopt met de server.
+        const parts = new Intl.DateTimeFormat('nl-NL', {
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          timeZone: 'Europe/Amsterdam'
+        }).formatToParts(new Date());
+        const y = parts.find(p => p.type === 'year')?.value || '1970';
+        const m = parts.find(p => p.type === 'month')?.value || '01';
+        const d = parts.find(p => p.type === 'day')?.value || '01';
+        return `${y}${m}${d}`;
+      }
+
+      function fallbackFilenameForAction(action){
+        // Fallback als Content-Disposition ontbreekt.
+        // Let op: form.action is meestal een absolute URL; pak daarom pathname.
+        let path = action;
+        try { path = new URL(action).pathname; } catch(e) {}
+
+        const date = yyyymmddAmsterdam();
+        const map = {
+          '/convert/amateur': `${date}_cue_print_uitslagen_amateurs.txt`,
+          '/convert/amateur-online': `${date}_cue_web_uitslagen_amateurs.txt`,
+          '/convert/regiosport': `${date}_cue_print_uitslagen_regiosport.txt`,
+          '/convert/topscorers': `${date}_cue_web_topscorers_amateurs.txt`,
+        };
+        return map[path] || null;
+      }
+
       // File-knop: groene state bij file-selectie
       document.querySelectorAll('[data-filepicker] input[type="file"]').forEach(input => {
         input.addEventListener('change', () => {
@@ -166,7 +209,7 @@
           const submitBtn = form.querySelector('button[type="submit"]');
           const targetId  = form.dataset.target;
           const fileInput = form.querySelector('input[type="file"]');
-          const filename  = form.dataset.filename || "export.txt";
+          const fallbackFilename  = fallbackFilenameForAction(form.action) || form.dataset.filename || "export.txt";
           if (!fileInput?.files?.length) { alert("Kies eerst een bestand."); return; }
 
           submitBtn.disabled = true;
@@ -187,6 +230,15 @@
             // Sla op in verborgen textarea voor 'Kopieer direct de code'
             const ta = document.getElementById(targetId);
             if (ta) ta.value = text;
+
+            // Bestandsnaam: server > fallback uit data-attribute
+            const filename = filenameFromContentDisposition(res) || fallbackFilename;
+
+            // Bewaar bestandsnaam voor eventuele latere client-side downloads
+            if (ta) ta.dataset.filename = filename;
+            document.querySelectorAll(`.download-btn[data-target="${targetId}"]`).forEach(b => {
+              b.dataset.filename = filename;
+            });
 
             // Download als bestand
             const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
@@ -235,12 +287,12 @@
       document.querySelectorAll(".download-btn").forEach(btn => {
         btn.addEventListener("click", () => {
           const targetId = btn.dataset.target;
-          const filename = btn.dataset.filename || "export.txt";
           const outputEl = document.getElementById(targetId);
           if (!outputEl || !outputEl.value) {
             alert("Nog geen code beschikbaar! Maak eerst de export.");
             return;
           }
+          const filename = outputEl.dataset.filename || btn.dataset.filename || "export.txt";
           const blob = new Blob([outputEl.value], { type: "text/plain;charset=utf-8" });
           const url  = URL.createObjectURL(blob);
           const a    = document.createElement("a");

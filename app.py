@@ -1,70 +1,127 @@
-from __future__ import annotations
-
-from flask import Flask, Response, abort, render_template, request
-
+from flask import Flask, render_template, request, Response, abort
 from converter_regiosport import excel_to_txt_regiosport
 from converter_amateur import excel_to_txt_amateur
+
+# Cue Print -> Cue Web converter (Optie 1: volledige classnamen)
 from converter_amateur_online import cueprint_txt_to_cueweb_html
+from converter_topscorers import extract_text_from_upload, topscorers_text_to_cueweb_html
 
-# Topscorers (docx/txt -> Cue Web HTML-code as text)
-from converter_topscorers import convert_topscorers_upload
+from openpyxl import Workbook
+import io
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+from urllib.parse import quote
+import re
 
 app = Flask(__name__)
 
 
+# -----------------------------
+# Output bestandsnamen
+# -----------------------------
+#
+# Pas deze patterns aan om de vaste naamopbouw per converter te bepalen.
+# Beschikbare placeholders:
+# - {date}: YYYYMMDD (Europe/Amsterdam)
+# - {date_dash}: YYYY-MM-DD (Europe/Amsterdam)
+# - {time}: HHMM (24u, Europe/Amsterdam)
+# - {stem}: bestandsnaam van de upload zónder extensie (geschoond)
+#
+# Gevraagd vaste formats:
+# - converter_amateur          -> YYYYMMDD_cue_print_uitslagen_amateurs.txt
+# - converter_amateur_online   -> YYYYMMDD_cue_web_uitslagen_amateurs.txt
+# - converter_regiosport       -> YYYYMMDD_cue_print_uitslagen_regiosport.txt
+# - converter_topscorers       -> YYYYMMDD_cue_web_topscorers_amateurs.txt
+
+AMATEUR_OUTPUT_PATTERN = "{date}_cue_print_uitslagen_amateurs.txt"
+AMATEUR_ONLINE_OUTPUT_PATTERN = "{date}_cue_web_uitslagen_amateurs.txt"
+REGIOSPORT_OUTPUT_PATTERN = "{date}_cue_print_uitslagen_regiosport.txt"
+TOPSCORERS_OUTPUT_PATTERN = "{date}_cue_web_topscorers_amateurs.txt"
+
+
+def _sanitize_stem(filename: str) -> str:
+    """Maak een veilige, korte bestands-stem op basis van de uploadnaam."""
+    name = (filename or "").strip()
+    # haal pad-separators weg
+    name = name.split("/")[-1].split("\\")[-1]
+    # drop extensie
+    if "." in name:
+        name = name.rsplit(".", 1)[0]
+
+    name = name.strip().replace(" ", "_")
+    name = re.sub(r"[^A-Za-z0-9_-]+", "", name)
+    name = re.sub(r"_+", "_", name)
+    name = name.strip("_-")
+    return (name or "input")[:60]
+
+
+def _content_disposition_attachment(filename: str) -> str:
+    """RFC 6266: stuur zowel filename als filename* voor brede browsercompat."""
+    safe_ascii = filename.encode("ascii", "ignore").decode("ascii") or "export.txt"
+    return f'attachment; filename="{safe_ascii}"; filename*=UTF-8\'\'{quote(filename)}'
+
+
+def _build_output_filename(pattern: str, uploaded_filename: str) -> str:
+    now = datetime.now(ZoneInfo("Europe/Amsterdam"))
+    return pattern.format(
+        date=now.strftime("%Y%m%d"),
+        date_dash=now.strftime("%Y-%m-%d"),
+        time=now.strftime("%H%M"),
+        stem=_sanitize_stem(uploaded_filename),
+    )
+
+
+# -----------------------------
+# UI
+# -----------------------------
 @app.get("/")
 def index():
     return render_template("index.html")
 
 
 # -----------------------------
-# Regiosport: Excel -> CUE txt
+# Convert endpoints
 # -----------------------------
 @app.post("/convert/regiosport")
 def convert_regiosport():
     file = request.files.get("file_regio")
     if not file or file.filename == "":
         return abort(400, "Geen bestand geüpload (Regiosport).")
-
     try:
         txt = excel_to_txt_regiosport(file.read())
     except Exception as e:
         return abort(400, f"Kon Regiosport-bestand niet verwerken: {e}")
 
+    out_name = _build_output_filename(REGIOSPORT_OUTPUT_PATTERN, file.filename or "")
     return Response(
         txt,
         mimetype="text/plain; charset=utf-8",
-        headers={"Content-Disposition": "attachment; filename=cue_export_regiosport.txt"},
+        headers={"Content-Disposition": _content_disposition_attachment(out_name)},
     )
 
 
-# -----------------------------
-# Amateurvoetbal: Excel -> CUE txt
-# -----------------------------
 @app.post("/convert/amateur")
 def convert_amateur():
     file = request.files.get("file_amateur")
     if not file or file.filename == "":
         return abort(400, "Geen bestand geüpload (Amateurvoetbal).")
-
     try:
         txt = excel_to_txt_amateur(file.read())
     except Exception as e:
         return abort(400, f"Kon Amateur-bestand niet verwerken: {e}")
 
+    out_name = _build_output_filename(AMATEUR_OUTPUT_PATTERN, file.filename or "")
     return Response(
         txt,
         mimetype="text/plain; charset=utf-8",
-        headers={"Content-Disposition": "attachment; filename=cue_export_amateur.txt"},
+        headers={"Content-Disposition": _content_disposition_attachment(out_name)},
     )
 
 
-# -----------------------------
-# Amateurvoetbal online: Cue Print txt -> Cue Web HTML-code (as txt)
-# -----------------------------
 @app.post("/convert/amateur-online")
 def convert_amateur_online():
+    """Converteer Cue Print-uitvoer (txt) naar Cue Web HTML-code (als tekstbestand)."""
     file = request.files.get("file_amateur_online")
     if not file or file.filename == "":
         return abort(400, "Geen bestand geüpload (Amateurvoetbal online).")
@@ -73,7 +130,6 @@ def convert_amateur_online():
         raw = file.read()
 
         # .xlsx (en veel ZIP-bestanden) beginnen met PK\x03\x04; voorkom onbruikbare output.
-        # Let op: .docx is hier niet toegestaan (alleen .txt).
         if raw.startswith(b"PK\x03\x04"):
             return abort(
                 400,
@@ -85,43 +141,60 @@ def convert_amateur_online():
     except Exception as e:
         return abort(400, f"Kon Amateurvoetbal online-bestand niet verwerken: {e}")
 
+    out_name = _build_output_filename(AMATEUR_ONLINE_OUTPUT_PATTERN, file.filename or "")
+
+    # Let op: inhoud is HTML-code, maar we leveren het als .txt (kopieerbaar/plakbaar).
     return Response(
         content_out,
         mimetype="text/plain; charset=utf-8",
-        headers={"Content-Disposition": "attachment; filename=cue_web_export_amateur.txt"},
+        headers={"Content-Disposition": _content_disposition_attachment(out_name)},
     )
 
 
 # -----------------------------
-# Topscorers: .docx/.txt -> Cue Web HTML-code (as txt)
+# Template (leeg invoerdocument) endpoints
 # -----------------------------
+def _xls_bytes_from_workbook(wb: Workbook) -> bytes:
+    """Helper: zet Workbook om naar bytes voor download."""
+    bio = io.BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    return bio.getvalue()
+
+
 @app.post("/convert/topscorers")
 def convert_topscorers():
+    """Converteer topscorers-tekst (.txt/.docx) naar Cue Web HTML-code (als .txt voor copy/paste)."""
     file = request.files.get("file_topscorers")
     if not file or file.filename == "":
         return abort(400, "Geen bestand geüpload (Topscorers).")
 
-    filename = file.filename or ""
-    raw = file.read()
-
-    # Hier is PK\x03\x04 NIET per definitie fout, want .docx is een ZIP-container.
-    # Validatie doen we op extensie; de converter kan met beide overweg.
-    name = filename.lower()
-    if not (name.endswith(".txt") or name.endswith(".docx")):
-        return abort(400, "Verkeerd bestandstype. Upload een .txt of .docx bestand.")
-
     try:
-        content_out = convert_topscorers_upload(raw, filename)
+        raw = file.read()
+
+        # prevent obvious wrong uploads (.xlsx / zip)
+        if raw.startswith(b"PK\x03\x04") and not (file.filename or "").lower().endswith(".docx"):
+            return abort(
+                400,
+                "Verkeerd bestand: dit lijkt geen .txt of .docx. Upload een tekstbestand (Word of Kladblok).",
+            )
+
+        text_in = extract_text_from_upload(raw, file.filename or "")
+        html_out = topscorers_text_to_cueweb_html(text_in)
     except Exception as e:
         return abort(400, f"Kon topscorers-bestand niet verwerken: {e}")
 
+    out_name = _build_output_filename(TOPSCORERS_OUTPUT_PATTERN, file.filename or "")
+
     return Response(
-        content_out,
+        html_out,
         mimetype="text/plain; charset=utf-8",
-        headers={"Content-Disposition": "attachment; filename=cue_web_topscorers.txt"},
+        headers={"Content-Disposition": _content_disposition_attachment(out_name)},
     )
 
 
+# -----------------------------
+# Main (alleen voor lokaal testen)
+# -----------------------------
 if __name__ == "__main__":
-    # Lokaal testen: Render gebruikt gunicorn.
     app.run(host="0.0.0.0", port=8000, debug=False)
