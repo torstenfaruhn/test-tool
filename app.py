@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from flask import Flask, Response, abort, render_template, request
 
 from converter_regiosport import excel_to_txt_regiosport
@@ -11,6 +14,11 @@ from converter_topscorers import convert_topscorers_upload
 
 
 app = Flask(__name__)
+
+
+def yyyymmdd_ams() -> str:
+    """Return current date in Europe/Amsterdam as YYYYMMDD."""
+    return datetime.now(ZoneInfo("Europe/Amsterdam")).strftime("%Y%m%d")
 
 
 @app.get("/")
@@ -32,10 +40,11 @@ def convert_regiosport():
     except Exception as e:
         return abort(400, f"Kon Regiosport-bestand niet verwerken: {e}")
 
+    fn = f'{yyyymmdd_ams()}_cue_print_uitslagen_regiosport.txt'
     return Response(
         txt,
         mimetype="text/plain; charset=utf-8",
-        headers={"Content-Disposition": "attachment; filename=cue_export_regiosport.txt"},
+        headers={"Content-Disposition": f'attachment; filename="{fn}"'},
     )
 
 
@@ -53,10 +62,11 @@ def convert_amateur():
     except Exception as e:
         return abort(400, f"Kon Amateur-bestand niet verwerken: {e}")
 
+    fn = f'{yyyymmdd_ams()}_cue_print_uitslagen_amateurvoetbal.txt'
     return Response(
         txt,
         mimetype="text/plain; charset=utf-8",
-        headers={"Content-Disposition": "attachment; filename=cue_export_amateur.txt"},
+        headers={"Content-Disposition": f'attachment; filename="{fn}"'},
     )
 
 
@@ -85,10 +95,11 @@ def convert_amateur_online():
     except Exception as e:
         return abort(400, f"Kon Amateurvoetbal online-bestand niet verwerken: {e}")
 
+    fn = f'{yyyymmdd_ams()}_cue_web_html_uitslagen_amateurvoetbal.txt'
     return Response(
         content_out,
         mimetype="text/plain; charset=utf-8",
-        headers={"Content-Disposition": "attachment; filename=cue_web_export_amateur.txt"},
+        headers={"Content-Disposition": f'attachment; filename="{fn}"'},
     )
 
 
@@ -115,10 +126,11 @@ def convert_topscorers():
     except Exception as e:
         return abort(400, f"Kon topscorers-bestand niet verwerken: {e}")
 
+    fn = f'{yyyymmdd_ams()}_cue_web_html_cumulatieve_lijst_topscorers.txt'
     return Response(
         content_out,
         mimetype="text/plain; charset=utf-8",
-        headers={"Content-Disposition": "attachment; filename=cue_web_topscorers.txt"},
+        headers={"Content-Disposition": f'attachment; filename="{fn}"'},
     )
 
 
