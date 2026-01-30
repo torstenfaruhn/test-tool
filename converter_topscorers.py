@@ -33,17 +33,17 @@ except Exception:
 # HTML templates (MUST remain complete and unabridged)
 # ---------------------------------------------------------------------------
 
-TEMPLATE_HTML = """<ol data-testid="numbered-list" class="List_list__TqiC5 List_list--ordered__GX7eF styles_list__7BMph styles_orderedList__wTCQI">
+TEMPLATE_HTML = """<ol data-testid="numbered-list" class="List_list___PrOV List_list--ordered__anrio styles_list__7BMph styles_orderedList__wTCQI">
 
-<li class="List_list-item__KWec8">
+<li class="List_list-item__3GiJL">
 
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="Icon_icon__IIDV_ Icon_icon--md__hvhhZ List_list-item__icon__z7Lcl" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6"></path></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="Icon_icon__QvF1G Icon_icon--md__13qDQ List_list-item__icon__iMBPS" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6"></path></svg>
 
-<p class="Paragraph_paragraph__fI0_V Paragraph_paragraph--default-sm-default__1te_f articleParagraph">speler 1</p>
+<p class="Paragraph_paragraph__r62CB Paragraph_paragraph--default-sm-default__xk_ec articleParagraph">speler 1</p>
 
 </li>
 
-<li class="List_list-item__KWec8"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="Icon_icon__IIDV_ Icon_icon--md__hvhhZ List_list-item__icon__z7Lcl" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6"></path></svg><p class="Paragraph_paragraph__fI0_V Paragraph_paragraph--default-sm-default__1te_f articleParagraph">speler 2<br>
+<li class="List_list-item__3GiJL"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="Icon_icon__QvF1G Icon_icon--md__13qDQ List_list-item__icon__iMBPS" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6"></path></svg><p class="Paragraph_paragraph__r62CB Paragraph_paragraph--default-sm-default__xk_ec articleParagraph">speler 2<br>
 speler 3</p>
 
 </li>
