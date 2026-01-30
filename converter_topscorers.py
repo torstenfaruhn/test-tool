@@ -30,30 +30,24 @@ except Exception:
 
 
 # ---------------------------------------------------------------------------
-# HTML templates (MUST remain complete and unabridged)
+# HTML templates (CLEANED PER STRATEGIE 1)
 # ---------------------------------------------------------------------------
 
-TEMPLATE_HTML = """<ol data-testid="numbered-list" class="List_list___PrOV List_list--ordered__anrio styles_list__7BMph styles_orderedList__wTCQI">
+TEMPLATE_HTML = """&lt;ol data-testid="numbered-list"&gt;
 
-<li class="List_list-item__3GiJL">
+&lt;li&gt;
+&lt;p&gt;speler 1&lt;/p&gt;
+&lt;/li&gt;
 
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="Icon_icon__QvF1G Icon_icon--md__13qDQ List_list-item__icon__iMBPS" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6"></path></svg>
+&lt;li&gt;
+&lt;p&gt;speler 2&lt;br&gt;
+speler 3&lt;/p&gt;
+&lt;/li&gt;
 
-<p class="Paragraph_paragraph__r62CB Paragraph_paragraph--default-sm-default__xk_ec articleParagraph">speler 1</p>
-
-</li>
-
-<li class="List_list-item__3GiJL"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="Icon_icon__QvF1G Icon_icon--md__13qDQ List_list-item__icon__iMBPS" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6"></path></svg><p class="Paragraph_paragraph__r62CB Paragraph_paragraph--default-sm-default__xk_ec articleParagraph">speler 2<br>
-speler 3</p>
-
-</li>
-
-</ol>"""
+&lt;/ol&gt;"""
 
 HEADING_TEMPLATE = (
-    '<h4 class="Heading_heading__tL6MO Heading_heading--sm__n8pqT '
-    'heading_articleSubheading__HfjIx heading_sm__u3F2n" '
-    'data-testid="article-subhead">{title}</h4>'
+    '&lt;h4 data-testid="article-subhead"&gt;{title}&lt;/h4&gt;'
 )
 
 
@@ -68,20 +62,20 @@ DOELPUNT_RE = re.compile(r"\bdoelpunt", re.IGNORECASE)
 
 
 def parse_html_template(template_text: str) -> Tuple[str, str, str]:
-    m_ol = re.search(r"(<ol[^>]*>)(.*?)(</ol>)", template_text, re.S)
+    m_ol = re.search(r"(&lt;ol[^&gt;]*&gt;)(.*?)(&lt;/ol&gt;)", template_text, re.S)
     if not m_ol:
-        raise ValueError("Kon geen <ol>...</ol> in het sjabloon vinden.")
+        raise ValueError("Kon geen &lt;ol&gt;...&lt;/ol&gt; in het sjabloon vinden.")
     prefix = template_text[: m_ol.start(2)]
     suffix = template_text[m_ol.end(2) :]
 
-    m_li = re.search(r"(<li\b.*?</li>)", m_ol.group(2), re.S)
+    m_li = re.search(r"(&lt;li\b.*?&lt;/li&gt;)", m_ol.group(2), re.S)
     if not m_li:
-        raise ValueError("Kon geen <li> in het sjabloon vinden.")
+        raise ValueError("Kon geen &lt;li&gt; in het sjabloon vinden.")
     li_block = m_li.group(1)
 
-    m_p = re.search(r"(<p\b[^>]*>)(.*?)(</p>)", li_block, re.S)
+    m_p = re.search(r"(&lt;p\b[^&gt;]*&gt;)(.*?)(&lt;/p&gt;)", li_block, re.S)
     if not m_p:
-        raise ValueError("Kon geen <p> in het <li>-sjabloon vinden.")
+        raise ValueError("Kon geen &lt;p&gt; in het &lt;li&gt;-sjabloon vinden.")
     p_open, _, p_close = m_p.groups()
 
     item_template = (
@@ -183,7 +177,7 @@ def apply_template(template_text: str, klassement_text: str) -> str:
         items: List[str] = []
         for group in groups:
             safe_lines = [_html.escape(l, quote=False) for l in group]
-            inner = "<br>\n".join(safe_lines)
+            inner = "&lt;br&gt;\n".join(safe_lines)
             items.append(item_template.replace("{content}", inner))
         html_parts.append(prefix + "\n" + "\n\n".join(items) + "\n" + suffix)
 
