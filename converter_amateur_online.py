@@ -15,12 +15,12 @@ _REPLACEMENTS: dict[str, str] = {
     "<body>": "",
     "</body>": "",
     "<subhead_lead>": (
-        '<h5 class="Heading_heading__okScq Heading_heading--lg__v_Lob heading_lg__W3ya6" '
+        '<h5 class="Heading_heading__tL6MO Heading_heading--lg__wP2Ux heading_lg__W3ya6" '
         'data-testid="infoblock-headline">'
     ),
     "</subhead_lead>": "</h5>",
     "<subhead>": (
-        '<h6 class="Heading_heading__okScq Heading_heading--sm__bGPWw heading_infoblockSubheading__Ecn_I heading_sm__u3F2n" '
+        '<h6 class="Heading_heading__tL6MO Heading_heading--sm__n8pqT heading_infoblockSubheading__Ecn_I heading_sm__u3F2n" '
         'data-testid="infoblock-heading">'
     ),
     "</subhead>": "</h6>",
