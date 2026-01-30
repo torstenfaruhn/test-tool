@@ -51,7 +51,7 @@ speler 3</p>
 </ol>"""
 
 HEADING_TEMPLATE = (
-    '<h4 class="Heading_heading__u5NOQ Heading_heading--sm__yIwgk '
+    '<h4 class="Heading_heading__tL6MO Heading_heading--sm__n8pqT '
     'heading_articleSubheading__HfjIx heading_sm__u3F2n" '
     'data-testid="article-subhead">{title}</h4>'
 )
