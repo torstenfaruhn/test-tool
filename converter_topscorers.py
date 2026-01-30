@@ -5,8 +5,8 @@ converter_topscorers.py (Render-compatible build)
 
 Fixes:
 - Robust template parsing: supports both escaped HTML (&lt;...&gt;) and real HTML (<...>).
-- Indentation fixed to avoid IndentationError on Render.
 - Exposes `convert_topscorers_upload(file_bytes, filename)` for app import.
+- Explicit __all__ export for unambiguous symbol import.
 
 Dependencies:
 - python-docx (only needed for .docx input)
@@ -28,10 +28,10 @@ except Exception:
 
 # ---------------------------------------------------------------------------
 # HTML templates (CLEANED PER STRATEGIE 1)
-# You may keep these escaped or unescaped; parser now accepts both.
+# Parser accepteert zowel escaped als unescaped varianten.
 # ---------------------------------------------------------------------------
 
-# Escaped variant (keeps compatibility with existing pipeline)
+# Escaped variant (compatibel met jouw pipeline)
 TEMPLATE_HTML = """&lt;ol data-testid="numbered-list"&gt;
 
 &lt;li&gt;
@@ -51,7 +51,7 @@ HEADING_TEMPLATE = (
 
 
 # ---------------------------------------------------------------------------
-# Regex helpers (supports escaped and unescaped HTML)
+# Regex helpers (escaped en unescaped HTML)
 # ---------------------------------------------------------------------------
 
 # Escaped patterns
@@ -71,9 +71,9 @@ DOELPUNT_RE = re.compile(r"\bdoelpunt", re.IGNORECASE)
 
 def _parse_template_blocks(template_text: str) -> Tuple[str, str, str]:
     """
-    Try escaped first, then unescaped. Returns (prefix, item_template, suffix).
+    Probeer eerst escaped, dan unescaped. Retourneert (prefix, item_template, suffix).
     """
-    # --- Attempt escaped form ---
+    # --- Escaped ---
     m_ol = ESC_OL_RE.search(template_text)
     if m_ol:
         prefix = template_text[: m_ol.start(2)]
@@ -94,10 +94,10 @@ def _parse_template_blocks(template_text: str) -> Tuple[str, str, str]:
         )
         return prefix, item_template, suffix
 
-    # --- Attempt unescaped (real HTML) form ---
+    # --- Unescaped ---
     m_ol = RAW_OL_RE.search(template_text)
     if not m_ol:
-        # Keep original-style error message for upstream handling
+        # Houd de oude fouttekst aan voor compatibiliteit met jouw UI
         raise ValueError("Kon geen &lt;ol&gt;...&lt;/ol&gt; in het sjabloon vinden.")
 
     prefix = template_text[: m_ol.start(2)]
@@ -119,8 +119,8 @@ def _parse_template_blocks(template_text: str) -> Tuple[str, str, str]:
     return prefix, item_template, suffix
 
 
-# Backward-compatible wrapper name used elsewhere in the file
 def parse_html_template(template_text: str) -> Tuple[str, str, str]:
+    """Compatibele wrapper."""
     return _parse_template_blocks(template_text)
 
 
@@ -148,7 +148,7 @@ def is_section_heading(line: str) -> bool:
     if "KLASSE" not in upper and "DIVISIE" not in upper:
         return False
 
-    # Player lines like "... (.., vierde divisie) - 14 doelpunten" are not headings.
+    # Spelerregels zoals "... (.., vierde divisie) - 14 doelpunten" zijn geen headings.
     if looks_like_player_stat_line(s):
         return False
 
@@ -215,5 +215,97 @@ def apply_template(template_text: str, klassement_text: str) -> str:
         html_parts.append(HEADING_TEMPLATE.format(title=_html.escape(title)))
         items: List[str] = []
         for group in groups:
-            # Preserve inline <br> semantics within <p>
+            # Bewaar inline <br> semantiek binnen <p>
             safe_lines = [_html.escape(l, quote=False) for l in group]
+            inner = "&lt;br&gt;\n".join(safe_lines)
+            items.append(item_template.replace("{content}", inner))
+        html_parts.append(prefix + "\n" + "\n\n".join(items) + "\n" + suffix)
+
+    return "\n\n".join(html_parts)
+
+
+# ---------------------------------------------------------------------------
+# Input extraction
+# ---------------------------------------------------------------------------
+
+def extract_text_from_docx_bytes(file_bytes: bytes) -> str:
+    if Document is None:
+        raise ImportError(
+            "python-docx is niet beschikbaar. Voeg 'python-docx' toe aan je dependencies."
+        )
+
+    tmp_path = Path("_uploaded_input.docx")
+    tmp_path.write_bytes(file_bytes)
+
+    doc = Document(str(tmp_path))
+    lines: List[str] = []
+
+    for p in doc.paragraphs:
+        lines.append(p.text)
+
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                lines.extend(cell.text.splitlines())
+
+    return "\n".join(lines)
+
+
+def extract_text_from_upload_bytes(file_bytes: bytes, filename: str) -> str:
+    name = (filename or "").lower()
+
+    if name.endswith(".docx"):
+        return extract_text_from_docx_bytes(file_bytes)
+
+    try:
+        return file_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        return file_bytes.decode("cp1252")
+
+
+# ---------------------------------------------------------------------------
+# Public API for web apps (Render import)
+# ---------------------------------------------------------------------------
+
+def convert_topscorers_upload(file_bytes: bytes, filename: str) -> str:
+    """Convert an uploaded file (bytes + original filename) to HTML."""
+    text = extract_text_from_upload_bytes(file_bytes, filename)
+    return apply_template(TEMPLATE_HTML, text)
+
+
+# Expliciete exportlijst (maakt symbol import ondubbelzinnig)
+__all__ = ["convert_topscorers_upload"]
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def convert_file_to_html(in_path: Path) -> str:
+    return convert_topscorers_upload(in_path.read_bytes(), in_path.name)
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Converteer topscoorders/klassement (.docx of .txt) naar HTML."
+    )
+    parser.add_argument("input", help="Pad naar inputbestand (.docx of .txt).")
+    parser.add_argument(
+        "-o",
+        "--output",
+        default="klassement_output_html.txt",
+        help="Pad naar outputbestand (tekstbestand met HTML).",
+    )
+
+    args = parser.parse_args(argv)
+    in_path = Path(args.input)
+    out_path = Path(args.output)
+
+    out_html = convert_file_to_html(in_path)
+    out_path.write_text(out_html, encoding="utf-8")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+``
