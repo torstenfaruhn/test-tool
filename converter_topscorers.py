@@ -3,13 +3,16 @@
 """
 converter_topscorers.py (Render-compatible build)
 
-Fixes:
-- Robust template parsing: supports both escaped HTML (&lt;...&gt;) and real HTML (<...>).
-- Exposes `convert_topscorers_upload(file_bytes, filename)` for app import.
-- Explicit __all__ export for unambiguous symbol import.
+Key fix for your Render error:
+- Exposes `convert_topscorers_upload(file_bytes, filename)` so an app can import:
+  `from converter_topscorers import convert_topscorers_upload`
+
+Also includes a CLI entrypoint.
 
 Dependencies:
 - python-docx (only needed for .docx input)
+
+HTML templates are copied in full and are not abbreviated.
 """
 
 from __future__ import annotations
@@ -27,101 +30,64 @@ except Exception:
 
 
 # ---------------------------------------------------------------------------
-# HTML templates (CLEANED PER STRATEGIE 1)
-# Parser accepteert zowel escaped als unescaped varianten.
+# HTML templates (MUST remain complete and unabridged)
 # ---------------------------------------------------------------------------
 
-# Escaped variant (compatibel met jouw pipeline)
-TEMPLATE_HTML = """&lt;ol data-testid="numbered-list"&gt;
+TEMPLATE_HTML = """<ol data-testid="numbered-list" class="List_list___PrOV List_list--ordered__anrio styles_list__7BMph styles_orderedList__wTCQI">
 
-&lt;li&gt;
-&lt;p&gt;speler 1&lt;/p&gt;
-&lt;/li&gt;
+<li class="List_list-item__3GiJL">
 
-&lt;li&gt;
-&lt;p&gt;speler 2&lt;br&gt;
-speler 3&lt;/p&gt;
-&lt;/li&gt;
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="Icon_icon__QvF1G Icon_icon--md__13qDQ List_list-item__icon__iMBPS" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6"></path></svg>
 
-&lt;/ol&gt;"""
+<p class="Paragraph_paragraph__r62CB Paragraph_paragraph--default-sm-default__xk_ec articleParagraph">speler 1</p>
+
+</li>
+
+<li class="List_list-item__3GiJL"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="Icon_icon__QvF1G Icon_icon--md__13qDQ List_list-item__icon__iMBPS" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6"></path></svg><p class="Paragraph_paragraph__r62CB Paragraph_paragraph--default-sm-default__xk_ec articleParagraph">speler 2<br>
+speler 3</p>
+
+</li>
+
+</ol>"""
 
 HEADING_TEMPLATE = (
-    '&lt;h4 data-testid="article-subhead"&gt;{title}&lt;/h4&gt;'
+    '<h4 class="Heading_heading__tL6MO Heading_heading--sm__n8pqT '
+    'heading_articleSubheading__HfjIx heading_sm__u3F2n" '
+    'data-testid="article-subhead">{title}</h4>'
 )
 
 
 # ---------------------------------------------------------------------------
-# Regex helpers (escaped en unescaped HTML)
+# Parsing logic (ported from the notebook; prevents "divisie" inside player lines
+# from being mistaken as section headings)
 # ---------------------------------------------------------------------------
-
-# Escaped patterns
-ESC_OL_RE = re.compile(r"(&lt;ol[^&gt;]*&gt;)(.*?)(&lt;/ol&gt;)", re.S)
-ESC_LI_RE = re.compile(r"(&lt;li\b.*?&lt;/li&gt;)", re.S)
-ESC_P_RE  = re.compile(r"(&lt;p\b[^&gt;]*&gt;)(.*?)(&lt;/p&gt;)", re.S)
-
-# Unescaped patterns
-RAW_OL_RE = re.compile(r"(<ol[^>]*>)(.*?)(</ol>)", re.S | re.IGNORECASE)
-RAW_LI_RE = re.compile(r"(<li\b.*?</li>)", re.S | re.IGNORECASE)
-RAW_P_RE  = re.compile(r"(<p\b[^>]*>)(.*?)(</p>)", re.S | re.IGNORECASE)
 
 NUMBER_RE = re.compile(r"^\s*\d+\.\s")
 GOALS_RE = re.compile(r"\b\d+\b")
 DOELPUNT_RE = re.compile(r"\bdoelpunt", re.IGNORECASE)
 
 
-def _parse_template_blocks(template_text: str) -> Tuple[str, str, str]:
-    """
-    Probeer eerst escaped, dan unescaped. Retourneert (prefix, item_template, suffix).
-    """
-    # --- Escaped ---
-    m_ol = ESC_OL_RE.search(template_text)
-    if m_ol:
-        prefix = template_text[: m_ol.start(2)]
-        suffix = template_text[m_ol.end(2):]
-
-        m_li = ESC_LI_RE.search(m_ol.group(2))
-        if not m_li:
-            raise ValueError("Kon geen &lt;li&gt; in het (escaped) sjabloon vinden.")
-        li_block = m_li.group(1)
-
-        m_p = ESC_P_RE.search(li_block)
-        if not m_p:
-            raise ValueError("Kon geen &lt;p&gt; in het (escaped) &lt;li&gt;-sjabloon vinden.")
-        p_open, _, p_close = m_p.groups()
-
-        item_template = (
-            li_block[: m_p.start()] + p_open + "{content}" + p_close + li_block[m_p.end():]
-        )
-        return prefix, item_template, suffix
-
-    # --- Unescaped ---
-    m_ol = RAW_OL_RE.search(template_text)
+def parse_html_template(template_text: str) -> Tuple[str, str, str]:
+    m_ol = re.search(r"(<ol[^>]*>)(.*?)(</ol>)", template_text, re.S)
     if not m_ol:
-        # Houd de oude fouttekst aan voor compatibiliteit met jouw UI
-        raise ValueError("Kon geen &lt;ol&gt;...&lt;/ol&gt; in het sjabloon vinden.")
-
+        raise ValueError("Kon geen <ol>...</ol> in het sjabloon vinden.")
     prefix = template_text[: m_ol.start(2)]
-    suffix = template_text[m_ol.end(2):]
+    suffix = template_text[m_ol.end(2) :]
 
-    m_li = RAW_LI_RE.search(m_ol.group(2))
+    m_li = re.search(r"(<li\b.*?</li>)", m_ol.group(2), re.S)
     if not m_li:
-        raise ValueError("Kon geen <li> in het (unescaped) sjabloon vinden.")
+        raise ValueError("Kon geen <li> in het sjabloon vinden.")
     li_block = m_li.group(1)
 
-    m_p = RAW_P_RE.search(li_block)
+    m_p = re.search(r"(<p\b[^>]*>)(.*?)(</p>)", li_block, re.S)
     if not m_p:
-        raise ValueError("Kon geen <p> in het (unescaped) <li>-sjabloon vinden.")
+        raise ValueError("Kon geen <p> in het <li>-sjabloon vinden.")
     p_open, _, p_close = m_p.groups()
 
     item_template = (
-        li_block[: m_p.start()] + p_open + "{content}" + p_close + li_block[m_p.end():]
+        li_block[: m_p.start()] + p_open + "{content}" + p_close + li_block[m_p.end() :]
     )
     return prefix, item_template, suffix
-
-
-def parse_html_template(template_text: str) -> Tuple[str, str, str]:
-    """Compatibele wrapper."""
-    return _parse_template_blocks(template_text)
 
 
 def looks_like_player_stat_line(line: str) -> bool:
@@ -148,7 +114,8 @@ def is_section_heading(line: str) -> bool:
     if "KLASSE" not in upper and "DIVISIE" not in upper:
         return False
 
-    # Spelerregels zoals "... (.., vierde divisie) - 14 doelpunten" zijn geen headings.
+    # Crucial: player lines like "... (.., vierde divisie) - 14 doelpunten"
+    # must not be treated as headings.
     if looks_like_player_stat_line(s):
         return False
 
@@ -215,9 +182,8 @@ def apply_template(template_text: str, klassement_text: str) -> str:
         html_parts.append(HEADING_TEMPLATE.format(title=_html.escape(title)))
         items: List[str] = []
         for group in groups:
-            # Bewaar inline <br> semantiek binnen <p>
             safe_lines = [_html.escape(l, quote=False) for l in group]
-            inner = "&lt;br&gt;\n".join(safe_lines)
+            inner = "<br>\n".join(safe_lines)
             items.append(item_template.replace("{content}", inner))
         html_parts.append(prefix + "\n" + "\n\n".join(items) + "\n" + suffix)
 
@@ -273,10 +239,6 @@ def convert_topscorers_upload(file_bytes: bytes, filename: str) -> str:
     return apply_template(TEMPLATE_HTML, text)
 
 
-# Expliciete exportlijst (maakt symbol import ondubbelzinnig)
-__all__ = ["convert_topscorers_upload"]
-
-
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -308,4 +270,3 @@ def main(argv: Optional[List[str]] = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-``
