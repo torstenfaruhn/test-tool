@@ -4,6 +4,40 @@ import unicodedata
 import pandas as pd
 
 
+
+def _is_blank(v) -> bool:
+    """True als waarde leeg is (NaN/None/whitespace)."""
+    if v is None:
+        return True
+    try:
+        if pd.isna(v):
+            return True
+    except Exception:
+        pass
+    return str(v).strip() == ""
+
+
+def _has_any_data_in_cols(df: pd.DataFrame, start_idx: int, end_idx: int) -> bool:
+    """Check of er ergens (start_idx..end_idx) een niet-lege cel staat.
+    Als kolommen ontbreken: False.
+    """
+    if df is None or df.empty:
+        return False
+    ncols = df.shape[1]
+    if ncols <= start_idx:
+        return False
+    end = min(end_idx, ncols - 1)
+    # Alleen de relevante kolommen bekijken; snel en robuust
+    sub = df.iloc[:, start_idx : end + 1]
+    # Any non-blank?
+    for col in sub.columns:
+        s = sub[col]
+        # dropna + strip check
+        if s.dropna().astype(str).str.strip().ne("").any():
+            return True
+    return False
+
+
 def _strip_accents(s: str) -> str:
     return "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c))
 
@@ -19,6 +53,12 @@ def _nl_sort_key(sport: str):
 
 
 def convert_sheet1_blocks(df):
+    # Lege of onvolledige sheet1 is geen fout: sla sheet1 over.
+    if df is None or df.empty or df.shape[1] < 2:
+        return []
+    # Als in kolommen B t/m E geen input staat: sla sheet1 over.
+    if not _has_any_data_in_cols(df, 1, 4):
+        return []
     """Parse 'Sporten met uitslagregel' naar blokken met keys: sport, render_lines(list).
        Neemt dynamisch alle 'UITSLAGREGEL N' mee (N = 1..∞)."""
     label_col = df.columns[0]
@@ -62,6 +102,12 @@ def convert_sheet1_blocks(df):
 
 
 def iter_sheet2_blocks(df):
+    # Lege of onvolledige sheet2 is geen fout: sla sheet2 over.
+    if df is None or df.empty or df.shape[1] < 5:
+        return
+    # Als in kolommen B t/m E geen input staat: sla sheet2 over.
+    if not _has_any_data_in_cols(df, 1, 4):
+        return
     """Yield blokken uit 'Sporten met stand' met: sport, evenement, rows, stand."""
     cols = list(df.columns)
     a, b, c, d, e = cols[0], cols[1], cols[2], cols[3], cols[4]
@@ -172,8 +218,15 @@ def suppress_redundant_sportheads(blocks):
 def excel_to_txt_regiosport(file_bytes: bytes) -> str:
     buf = io.BytesIO(file_bytes)
     xls = pd.ExcelFile(buf, engine="openpyxl")
-    sheet1 = pd.read_excel(xls, sheet_name=0, dtype=str)
-    sheet2 = pd.read_excel(xls, sheet_name=1, dtype=str)
+    try:
+        sheet1 = pd.read_excel(xls, sheet_name=0, dtype=str)
+    except Exception:
+        sheet1 = pd.DataFrame()
+
+    try:
+        sheet2 = pd.read_excel(xls, sheet_name=1, dtype=str)
+    except Exception:
+        sheet2 = pd.DataFrame()
 
     blocks = to_render_blocks(sheet1, sheet2)
     blocks = suppress_redundant_sportheads(blocks)
