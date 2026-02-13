@@ -22,7 +22,7 @@
       <section class="card-grid">
 <section class="card">
         <div class="card__head">
-          <h3>Amateurvoetbal: Excel > Cue Print</h3>
+          <h3>Amateurvoetbal: Excel &gt; Cue Print</h3>
           <p>Upload het ingevulde Excelbestand (.xlsx) met de uitslagen. Klik daarna op de knop hieronder. Je krijgt dan een txt-bestand dat je in Cue Print (Codefixer) moet plakken.</p>
         </div>
 
@@ -53,7 +53,7 @@
         
 <section class="card">
           <div class="card__head">
-            <h3>Amateurvoetbal: Cue Print > Cue Web</h3>
+            <h3>Amateurvoetbal: Cue Print &gt; Cue Web</h3>
             <p>Upload hier het tekstbestand met Cue Print-code met daarin de uitslagen. Je krijgt dan een Word-document waarvan je de inhoud direct als tekst in Cue Web kunt plakken.</p>
           </div>
 
@@ -72,17 +72,17 @@
 
           <div class="actions actions--bottom">
             <button class="btn btn-outline download-btn" data-target="amateur-online-output" data-filename="cue_word_export_amateur.docx">
-              Download Cue Web-code (txt)
+              Download Word-document (.docx)
             </button>
             <button class="btn btn-outline copy-btn" data-target="amateur-online-output">
-              Kopieer direct de code
+              Kopieer direct de tekst
             </button>
           </div>
         </section>
       
 <section class="card">
         <div class="card__head">
-          <h3>Regiosport: Excel > Cue Print</h3>
+          <h3>Regiosport: Excel &gt; Cue Print</h3>
         <p>Upload het ingevulde Excelbestand (.xlsx). Klik daarna op de knop hieronder. Je krijgt dan een txt-bestand dat je in Cue Print (Codefixer) moet plakken.</p>
         </div>
 
@@ -187,11 +187,25 @@
         const date = yyyymmddAmsterdam();
         const map = {
           '/convert/amateur': `${date}_cue_print_uitslagen_amateurs.txt`,
-          '/convert/amateur-online': `${date}_cue_web_uitslagen_amateurs.txt`,
+          '/convert/amateur-online': `${date}_cue_word_uitslagen_amateurs.docx`,
           '/convert/regiosport': `${date}_cue_print_uitslagen_regiosport.txt`,
           '/convert/topscorers': `${date}_cue_web_topscorers_amateurs.txt`,
         };
         return map[path] || null;
+      }
+
+      function isDocxResponse(res){
+        const ct = (res.headers.get('Content-Type') || '').toLowerCase();
+        return ct.includes('application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+          || ct.includes('officedocument.wordprocessingml.document');
+      }
+
+      function downloadBlob(blob, filename){
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement("a");
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click();
+        setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
       }
 
       // File-knop: groene state bij file-selectie
@@ -202,7 +216,7 @@
         });
       });
 
-      // Intercepteer submit: vraag de TXT via fetch op, download zelf en sla op in verborgen textarea
+      // Intercepteer submit: download zelf en sla (waar zinvol) op in verborgen textarea
       document.querySelectorAll("form.js-convert").forEach(form => {
         form.addEventListener("submit", async (e) => {
           e.preventDefault();
@@ -219,34 +233,55 @@
           try {
             const fd = new FormData(form);
             const res = await fetch(form.action, { method: "POST", body: fd });
-            const text = await res.text();
 
             if (!res.ok) {
-              alert(text || "Er ging iets mis. Controleer je upload.");
+              // Probeer fout als tekst te tonen
+              let msg = "";
+              try { msg = await res.text(); } catch(e) {}
+              alert(msg || "Er ging iets mis. Controleer je upload.");
               submitBtn.textContent = originalText;
               return;
             }
 
-            // Sla op in verborgen textarea voor 'Kopieer direct de code'
-            const ta = document.getElementById(targetId);
-            if (ta) ta.value = text;
-
-            // Bestandsnaam: server > fallback uit data-attribute
+            // Bestandsnaam: server > fallback
             const filename = filenameFromContentDisposition(res) || fallbackFilename;
 
-            // Bewaar bestandsnaam voor eventuele latere client-side downloads
+            const ta = document.getElementById(targetId);
             if (ta) ta.dataset.filename = filename;
+
             document.querySelectorAll(`.download-btn[data-target="${targetId}"]`).forEach(b => {
               b.dataset.filename = filename;
             });
 
-            // Download als bestand
+            // DOCX: binary behandelen (geen res.text())
+            if (isDocxResponse(res)) {
+              const blob = await res.blob();
+
+              // Bewaar blob voor 'Download'-knop, maar geen tekst in textarea
+              if (ta) {
+                ta.value = ""; // copy/paste heeft hier geen zin
+                // Bewaar blob tijdelijk in memory via een object URL
+                // (alleen voor de sessie; geen opslag)
+                if (ta.dataset.blobUrl) {
+                  try { URL.revokeObjectURL(ta.dataset.blobUrl); } catch(e) {}
+                }
+                ta.dataset.blobUrl = URL.createObjectURL(blob);
+              }
+
+              downloadBlob(blob, filename);
+
+              submitBtn.textContent = "Klaar!";
+              setTimeout(() => submitBtn.textContent = originalText, 1500);
+              return;
+            }
+
+            // Tekst (default): in textarea + download als .txt
+            const text = await res.text();
+
+            if (ta) ta.value = text;
+
             const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-            const url  = URL.createObjectURL(blob);
-            const a    = document.createElement("a");
-            a.href = url; a.download = filename;
-            document.body.appendChild(a); a.click();
-            setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
+            downloadBlob(blob, filename);
 
             submitBtn.textContent = "Klaar!";
             setTimeout(() => submitBtn.textContent = originalText, 1500);
@@ -283,22 +318,36 @@
         });
       });
 
-      // Download Cue Web-code (client-side) vanuit verborgen textarea
+      // Download (client-side) vanuit verborgen textarea
       document.querySelectorAll(".download-btn").forEach(btn => {
         btn.addEventListener("click", () => {
           const targetId = btn.dataset.target;
           const outputEl = document.getElementById(targetId);
-          if (!outputEl || !outputEl.value) {
+          if (!outputEl) {
+            alert("Geen output-element gevonden.");
+            return;
+          }
+
+          const filename = outputEl.dataset.filename || btn.dataset.filename || "export.txt";
+
+          // Als er een docx blob-url is opgeslagen: gebruik die
+          if (outputEl.dataset.blobUrl && filename.toLowerCase().endsWith(".docx")) {
+            const a = document.createElement("a");
+            a.href = outputEl.dataset.blobUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => a.remove(), 0);
+            return;
+          }
+
+          // Anders: tekst downloaden
+          if (!outputEl.value) {
             alert("Nog geen code beschikbaar! Maak eerst de export.");
             return;
           }
-          const filename = outputEl.dataset.filename || btn.dataset.filename || "export.txt";
           const blob = new Blob([outputEl.value], { type: "text/plain;charset=utf-8" });
-          const url  = URL.createObjectURL(blob);
-          const a    = document.createElement("a");
-          a.href = url; a.download = filename;
-          document.body.appendChild(a); a.click();
-          setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
+          downloadBlob(blob, filename);
         });
       });
 
