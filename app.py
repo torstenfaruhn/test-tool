@@ -4,7 +4,7 @@ from converter_amateur import excel_to_txt_amateur
 
 # Cue Print -> Cue Web converter (Optie 1: volledige classnamen)
 from converter_amateur_online import cueprint_txt_to_docx_bytes
-from converter_topscorers import extract_text_from_upload, topscorers_text_to_cueweb_html
+from converter_topscorers import extract_text_from_upload_bytes, topscorers_text_to_cueweb_html
 
 from openpyxl import Workbook
 import io
@@ -178,7 +178,7 @@ def convert_topscorers():
                 "Verkeerd bestand: dit lijkt geen .txt of .docx. Upload een tekstbestand (Word of Kladblok).",
             )
 
-        text_in = extract_text_from_upload(raw, file.filename or "")
+        text_in = extract_text_from_upload_bytes(raw, file.filename or "")
         html_out = topscorers_text_to_cueweb_html(text_in)
     except Exception as e:
         return abort(400, f"Kon topscorers-bestand niet verwerken: {e}")

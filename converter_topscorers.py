@@ -1,78 +1,41 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-converter_topscorers.py (Render-compatible build)
+"""Amateurvoetbal topscorers: tekstbestand (.txt/.docx) -> Cue Web HTML-code.
 
-Key fix for your Render error:
-- Exposes `convert_topscorers_upload(file_bytes, filename)` so an app can import:
-  `from converter_topscorers import convert_topscorers_upload`
+Gebaseerd op notebook:
+`12 klassement_html_converter_v12 - integratie docx.ipynb`.
 
-Also includes a CLI entrypoint.
-
-Dependencies:
-- python-docx (only needed for .docx input)
-
-HTML templates are copied in full and are not abbreviated.
+De output is HTML-code die als tekst (.txt) wordt aangeboden zodat deze eenvoudig te kopiëren/plakken is.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
-import argparse
 import html as _html
 import re
-from typing import List, Tuple, Optional
+import tempfile
+from typing import Tuple, List
 
-try:
-    from docx import Document  # python-docx
-except Exception:
-    Document = None  # type: ignore
+from docx import Document
 
+# HTML-heading voor klasse/divisie-koppen (Cue Web)
+HEADING_TEMPLATE = '<h4 class="Heading_heading__okScq Heading_heading--sm__bGPWw heading_articleSubheading__HfjIx heading_sm__u3F2n" data-testid="article-subhead">{title}</h4>'
 
-# ---------------------------------------------------------------------------
-# HTML templates (MUST remain complete and unabridged)
-# ---------------------------------------------------------------------------
-
-TEMPLATE_HTML = """<ol data-testid="numbered-list" class="List_list___PrOV List_list--ordered__anrio styles_list__7BMph styles_orderedList__wTCQI">
-
-<li class="List_list-item__3GiJL">
-
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="Icon_icon__QvF1G Icon_icon--md__13qDQ List_list-item__icon__iMBPS" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6"></path></svg>
-
-<p class="Paragraph_paragraph__r62CB Paragraph_paragraph--default-sm-default__xk_ec articleParagraph">speler 1</p>
-
-</li>
-
-<li class="List_list-item__3GiJL"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="Icon_icon__QvF1G Icon_icon--md__13qDQ List_list-item__icon__iMBPS" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6"></path></svg><p class="Paragraph_paragraph__r62CB Paragraph_paragraph--default-sm-default__xk_ec articleParagraph">speler 2<br>
-speler 3</p>
-
-</li>
-
-</ol>"""
-
-HEADING_TEMPLATE = (
-    '<h4 class="Heading_heading__tL6MO Heading_heading--sm__n8pqT '
-    'heading_articleSubheading__HfjIx heading_sm__u3F2n" '
-    'data-testid="article-subhead">{title}</h4>'
-)
-
-
-# ---------------------------------------------------------------------------
-# Parsing logic (ported from the notebook; prevents "divisie" inside player lines
-# from being mistaken as section headings)
-# ---------------------------------------------------------------------------
+# Ingebouwd HTML-sjabloon voor de genummerde lijst.
+# We gebruiken een stabiele (minimale) variant zonder hashed classnamen voor de <ol>/<li>,
+# maar behouden de Paragraph-classes voor de inhoudsregels.
+TEMPLATE_HTML = '<ol data-testid="numbered-list">\n<li>\n<p class="Paragraph_paragraph__exhQA Paragraph_paragraph--default-sm-default__jy0uG articleParagraph">{content}</p>\n</li>\n</ol>'
 
 NUMBER_RE = re.compile(r"^\s*\d+\.\s")
-GOALS_RE = re.compile(r"\b\d+\b")
-DOELPUNT_RE = re.compile(r"\bdoelpunt", re.IGNORECASE)
 
 
 def parse_html_template(template_text: str) -> Tuple[str, str, str]:
+    """Splits een <ol> template op in: prefix, item_template, suffix.
+
+    item_template bevat {content} als placeholder voor de inhoud.
+    """
     m_ol = re.search(r"(<ol[^>]*>)(.*?)(</ol>)", template_text, re.S)
     if not m_ol:
         raise ValueError("Kon geen <ol>...</ol> in het sjabloon vinden.")
     prefix = template_text[: m_ol.start(2)]
-    suffix = template_text[m_ol.end(2) :]
+    suffix = template_text[m_ol.end(2):]
 
     m_li = re.search(r"(<li\b.*?</li>)", m_ol.group(2), re.S)
     if not m_li:
@@ -82,24 +45,18 @@ def parse_html_template(template_text: str) -> Tuple[str, str, str]:
     m_p = re.search(r"(<p\b[^>]*>)(.*?)(</p>)", li_block, re.S)
     if not m_p:
         raise ValueError("Kon geen <p> in het <li>-sjabloon vinden.")
-    p_open, _, p_close = m_p.groups()
 
-    item_template = (
-        li_block[: m_p.start()] + p_open + "{content}" + p_close + li_block[m_p.end() :]
-    )
+    item_template = li_block[: m_p.start(2)] + "{content}" + li_block[m_p.end(2):]
     return prefix, item_template, suffix
 
 
 def looks_like_player_stat_line(line: str) -> bool:
     s = line.strip()
     lower = s.lower()
-
     if "(" in s and ")" in s:
         return True
-
-    if "-" in s and GOALS_RE.search(s) and DOELPUNT_RE.search(lower):
+    if "-" in s and re.search(r"\b\d+\b", s) and "doelpunt" in lower:
         return True
-
     return False
 
 
@@ -109,16 +66,11 @@ def is_section_heading(line: str) -> bool:
         return False
     if NUMBER_RE.match(s):
         return False
-
     upper = s.upper()
     if "KLASSE" not in upper and "DIVISIE" not in upper:
         return False
-
-    # Crucial: player lines like "... (.., vierde divisie) - 14 doelpunten"
-    # must not be treated as headings.
     if looks_like_player_stat_line(s):
         return False
-
     return True
 
 
@@ -126,37 +78,38 @@ def strip_source_rank_number(line: str) -> str:
     return re.sub(r"^\s*\d+\.\s*", "", line, count=1)
 
 
-def parse_sections(text: str) -> List[Tuple[str, List[List[str]]]]:
-    lines = text.splitlines()
-    sections: List[Tuple[str, List[List[str]]]] = []
+def parse_sections(text: str):
+    """Parseer inputtekst naar secties (titel + groepen regels).
 
-    current_title: Optional[str] = None
+    Herkent headings met 'KLASSE' of 'DIVISIE'. Een regel '1. ...' start een nieuwe speler-groep.
+    """
+    lines = text.splitlines()
+    sections = []
+    current_title = None
     current_groups: List[List[str]] = []
     current_group: List[str] = []
 
-    def flush_group() -> None:
-        nonlocal current_group
+    def flush_group():
+        nonlocal current_group, current_groups
         if current_group:
             current_groups.append(current_group)
             current_group = []
 
-    def flush_section() -> None:
-        nonlocal current_groups, current_title
+    def flush_section():
+        nonlocal current_title, current_groups, sections
         if current_title and current_groups:
             sections.append((current_title, current_groups))
         current_groups = []
 
     for raw_line in lines:
-        line = raw_line.rstrip("\n")
+        line = raw_line.rstrip("\n").strip()
+        if not line:
+            continue
 
         if is_section_heading(line):
             flush_group()
             flush_section()
             current_title = line.strip()
-            continue
-
-        if not line.strip():
-            flush_group()
             continue
 
         if NUMBER_RE.match(line):
@@ -173,100 +126,54 @@ def parse_sections(text: str) -> List[Tuple[str, List[List[str]]]]:
     return sections
 
 
-def apply_template(template_text: str, klassement_text: str) -> str:
-    prefix, item_template, suffix = parse_html_template(template_text)
-    sections = parse_sections(klassement_text)
-    html_parts: List[str] = []
+def topscorers_text_to_cueweb_html(text: str) -> str:
+    """Converteer topscorers tekst naar Cue Web HTML-code."""
+    prefix, item_template, suffix = parse_html_template(TEMPLATE_HTML)
+    sections = parse_sections(text)
+    html_parts = []
 
     for title, groups in sections:
         html_parts.append(HEADING_TEMPLATE.format(title=_html.escape(title)))
-        items: List[str] = []
+        items = []
         for group in groups:
             safe_lines = [_html.escape(l, quote=False) for l in group]
             inner = "<br>\n".join(safe_lines)
             items.append(item_template.replace("{content}", inner))
         html_parts.append(prefix + "\n" + "\n\n".join(items) + "\n" + suffix)
 
-    return "\n\n".join(html_parts)
+    return "\n\n".join(html_parts).strip() + "\n"
 
 
-# ---------------------------------------------------------------------------
-# Input extraction
-# ---------------------------------------------------------------------------
-
-def extract_text_from_docx_bytes(file_bytes: bytes) -> str:
-    if Document is None:
-        raise ImportError(
-            "python-docx is niet beschikbaar. Voeg 'python-docx' toe aan je dependencies."
-        )
-
-    tmp_path = Path("_uploaded_input.docx")
-    tmp_path.write_bytes(file_bytes)
-
-    doc = Document(str(tmp_path))
-    lines: List[str] = []
-
-    for p in doc.paragraphs:
-        lines.append(p.text)
-
-    for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                lines.extend(cell.text.splitlines())
-
-    return "\n".join(lines)
-
-
-def extract_text_from_upload_bytes(file_bytes: bytes, filename: str) -> str:
+def extract_text_from_upload(raw: bytes, filename: str) -> str:
+    """Lees upload (.txt of .docx) en geef de tekstinhoud terug."""
     name = (filename or "").lower()
-
     if name.endswith(".docx"):
-        return extract_text_from_docx_bytes(file_bytes)
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=True) as tmp:
+            tmp.write(raw)
+            tmp.flush()
+            doc = Document(tmp.name)
+            lines = []
+            for p in doc.paragraphs:
+                if p.text.strip():
+                    lines.append(p.text)
+            for table in doc.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        for ln in cell.text.splitlines():
+                            if ln.strip():
+                                lines.append(ln)
+            return "\n".join(lines)
 
-    try:
-        return file_bytes.decode("utf-8")
-    except UnicodeDecodeError:
-        return file_bytes.decode("cp1252")
-
-
-# ---------------------------------------------------------------------------
-# Public API for web apps (Render import)
-# ---------------------------------------------------------------------------
-
-def convert_topscorers_upload(file_bytes: bytes, filename: str) -> str:
-    """Convert an uploaded file (bytes + original filename) to HTML."""
-    text = extract_text_from_upload_bytes(file_bytes, filename)
-    return apply_template(TEMPLATE_HTML, text)
-
-
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
-
-def convert_file_to_html(in_path: Path) -> str:
-    return convert_topscorers_upload(in_path.read_bytes(), in_path.name)
+    # default: txt
+    return raw.decode("utf-8", errors="replace")
 
 
-def main(argv: Optional[List[str]] = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Converteer topscoorders/klassement (.docx of .txt) naar HTML."
-    )
-    parser.add_argument("input", help="Pad naar inputbestand (.docx of .txt).")
-    parser.add_argument(
-        "-o",
-        "--output",
-        default="klassement_output_html.txt",
-        help="Pad naar outputbestand (tekstbestand met HTML).",
-    )
+# ------------------------------------------------------------
+# Compat: bytes-uploader API (gebruikt door app.py)
+# ------------------------------------------------------------
+def extract_text_from_upload_bytes(raw: bytes, filename: str) -> str:
+    """Lees upload-bytes en geef tekst terug.
+    Wrapper voor extract_text_from_upload(...), zodat app.py een stabiele API heeft.
+    """
+    return extract_text_from_upload(raw, filename)
 
-    args = parser.parse_args(argv)
-    in_path = Path(args.input)
-    out_path = Path(args.output)
-
-    out_html = convert_file_to_html(in_path)
-    out_path.write_text(out_html, encoding="utf-8")
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
