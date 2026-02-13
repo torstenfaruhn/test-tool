@@ -29,7 +29,7 @@
         <form action="/convert/amateur" method="post" enctype="multipart/form-data"
               class="upload js-convert"
               data-target="amateur-output"
-              data-filename="export.txt">
+              data-filename="cue_export_amateur.txt">
           <label class="file btn-like" data-filepicker>
             <input type="file" name="file_amateur" accept=".xlsx" required />
             <span class="file__label">Bestand kiezen</span>
@@ -60,18 +60,18 @@
           <form action="/convert/amateur-online" method="post" enctype="multipart/form-data"
                 class="upload js-convert"
                 data-target="amateur-online-output"
-                data-filename="export.txt">
+                data-filename="cue_word_export_amateur.docx">
             <label class="file btn-like" data-filepicker>
               <input type="file" name="file_amateur_online" accept=".txt" required />
               <span class="file__label">Bestand kiezen</span>
             </label>
-            <button type="submit" class="btn btn-primary btn-like">Maak Cue-Web export</button>
+            <button type="submit" class="btn btn-primary btn-like">Maak Word export</button>
           </form>
 
           <textarea id="amateur-online-output" class="visually-hidden" aria-hidden="true"></textarea>
 
           <div class="actions actions--bottom">
-            <button class="btn btn-outline download-btn" data-target="amateur-online-output" data-filename="export.txt">
+            <button class="btn btn-outline download-btn" data-target="amateur-online-output" data-filename="cue_word_export_amateur.docx">
               Download Cue Web-code (txt)
             </button>
             <button class="btn btn-outline copy-btn" data-target="amateur-online-output">
@@ -89,7 +89,7 @@
         <form action="/convert/regiosport" method="post" enctype="multipart/form-data"
               class="upload js-convert"
               data-target="regiosport-output"
-              data-filename="export.txt">
+              data-filename="cue_export_regiosport.txt">
           <label class="file btn-like" data-filepicker>
             <input type="file" name="file_regio" accept=".xlsx" required />
             <span class="file__label">Bestand kiezen</span>
@@ -124,7 +124,7 @@
           <form action="/convert/topscorers" method="post" enctype="multipart/form-data"
                 class="upload js-convert"
                 data-target="topscorers-output"
-                data-filename="export.txt">
+                data-filename="cue_web_export_topscorers.txt">
             <label class="file btn-like" data-filepicker>
               <input type="file" name="file_topscorers" accept=".txt,.docx" required />
               <span class="file__label">Bestand kiezen</span>
@@ -136,7 +136,7 @@
 
           <div class="actions actions--bottom">
             <button class="btn btn-outline download-btn" data-target="topscorers-output"
-                    data-filename="export.txt">
+                    data-filename="cue_web_export_topscorers.txt">
               Download Cue Web-code (txt)
             </button>
             <button class="btn btn-outline copy-btn" data-target="topscorers-output">
@@ -151,6 +151,49 @@
     </main>
 
     <script>
+      // Haal bestandsnaam uit Content-Disposition (server) voor dynamische naamgeving
+      function filenameFromContentDisposition(res){
+        const cd = res.headers.get('Content-Disposition') || res.headers.get('content-disposition');
+        if (!cd) return null;
+
+        // RFC 5987 / RFC 6266: filename*=UTF-8''...
+        const star = cd.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+        if (star && star[1]) {
+          try { return decodeURIComponent(star[1].trim()); } catch(e) { return star[1].trim(); }
+        }
+
+        const normal = cd.match(/filename\s*=\s*"?([^";]+)"?/i);
+        return normal && normal[1] ? normal[1].trim() : null;
+      }
+
+      function yyyymmddAmsterdam(){
+        // Gebruik Europe/Amsterdam zodat de datum gelijk loopt met de server.
+        const parts = new Intl.DateTimeFormat('nl-NL', {
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          timeZone: 'Europe/Amsterdam'
+        }).formatToParts(new Date());
+        const y = parts.find(p => p.type === 'year')?.value || '1970';
+        const m = parts.find(p => p.type === 'month')?.value || '01';
+        const d = parts.find(p => p.type === 'day')?.value || '01';
+        return `${y}${m}${d}`;
+      }
+
+      function fallbackFilenameForAction(action){
+        // Fallback als Content-Disposition ontbreekt.
+        // Let op: form.action is meestal een absolute URL; pak daarom pathname.
+        let path = action;
+        try { path = new URL(action).pathname; } catch(e) {}
+
+        const date = yyyymmddAmsterdam();
+        const map = {
+          '/convert/amateur': `${date}_cue_print_uitslagen_amateurs.txt`,
+          '/convert/amateur-online': `${date}_cue_web_uitslagen_amateurs.txt`,
+          '/convert/regiosport': `${date}_cue_print_uitslagen_regiosport.txt`,
+          '/convert/topscorers': `${date}_cue_web_topscorers_amateurs.txt`,
+        };
+        return map[path] || null;
+      }
+
       // File-knop: groene state bij file-selectie
       document.querySelectorAll('[data-filepicker] input[type="file"]').forEach(input => {
         input.addEventListener('change', () => {
@@ -159,70 +202,6 @@
         });
       });
 
-      // Parse Content-Disposition filename (supports filename= and RFC 5987 filename*=UTF-8''...)
-      function getFilenameFromContentDisposition(res, fallback = "export.txt") {
-        const cd = res.headers.get("Content-Disposition") || "";
-
-        // 1) Prefer RFC 5987: filename*=UTF-8''encoded%20name.txt
-        // Examples:
-        //   attachment; filename*=UTF-8''20260107_file.txt
-        //   attachment; filename*=UTF-8'nl'20260107_file.txt
-        let match = cd.match(/filename\*\s*=\s*([^;]+)/i);
-        if (match && match[1]) {
-          let v = match[1].trim();
-
-          // Strip surrounding quotes if present
-          if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
-            v = v.slice(1, -1);
-          }
-
-          // Split "UTF-8''..." or "UTF-8'nl'..."
-          const parts = v.split("''");
-          if (parts.length === 2) {
-            try {
-              const decoded = decodeURIComponent(parts[1]);
-              return sanitizeFilename(decoded) || fallback;
-            } catch (_) {
-              // fall through to filename=
-            }
-          } else {
-            // Handle charset'lang'value form
-            const p2 = v.split("'");
-            if (p2.length >= 3) {
-              const encoded = p2.slice(2).join("'"); // rest after charset/lang
-              try {
-                const decoded = decodeURIComponent(encoded);
-                return sanitizeFilename(decoded) || fallback;
-              } catch (_) {
-                // fall through
-              }
-            }
-          }
-        }
-
-        // 2) Fallback: filename="name.txt" or filename=name.txt
-        match = cd.match(/filename\s*=\s*([^;]+)/i);
-        if (match && match[1]) {
-          let v = match[1].trim();
-
-          // Strip surrounding quotes if present
-          if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
-            v = v.slice(1, -1);
-          }
-
-          return sanitizeFilename(v) || fallback;
-        }
-
-        return fallback;
-      }
-
-      // Basic filename sanitization for cross-platform safety
-      function sanitizeFilename(name) {
-        if (!name) return "";
-        // Replace Windows-forbidden chars and trim whitespace
-        return name.replace(/[\\/:*?"<>|]/g, "_").trim();
-      }
-
       // Intercepteer submit: vraag de TXT via fetch op, download zelf en sla op in verborgen textarea
       document.querySelectorAll("form.js-convert").forEach(form => {
         form.addEventListener("submit", async (e) => {
@@ -230,7 +209,7 @@
           const submitBtn = form.querySelector('button[type="submit"]');
           const targetId  = form.dataset.target;
           const fileInput = form.querySelector('input[type="file"]');
-          const fallbackFilename = form.dataset.filename || "export.txt";
+          const fallbackFilename  = fallbackFilenameForAction(form.action) || form.dataset.filename || "export.txt";
           if (!fileInput?.files?.length) { alert("Kies eerst een bestand."); return; }
 
           submitBtn.disabled = true;
@@ -248,25 +227,25 @@
               return;
             }
 
-            // Bepaal bestandsnaam uit serverheader (single source of truth)
-            const downloadFilename = getFilenameFromContentDisposition(res, fallbackFilename);
-
             // Sla op in verborgen textarea voor 'Kopieer direct de code'
-            // én onthoud de filename voor de 'Download Cue Web-code' knoppen (client-side)
             const ta = document.getElementById(targetId);
-            if (ta) {
-              ta.value = text;
-              ta.dataset.filename = downloadFilename;
-            }
+            if (ta) ta.value = text;
+
+            // Bestandsnaam: server > fallback uit data-attribute
+            const filename = filenameFromContentDisposition(res) || fallbackFilename;
+
+            // Bewaar bestandsnaam voor eventuele latere client-side downloads
+            if (ta) ta.dataset.filename = filename;
+            document.querySelectorAll(`.download-btn[data-target="${targetId}"]`).forEach(b => {
+              b.dataset.filename = filename;
+            });
 
             // Download als bestand
             const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
             const url  = URL.createObjectURL(blob);
             const a    = document.createElement("a");
-            a.href = url;
-            a.download = downloadFilename;
-            document.body.appendChild(a);
-            a.click();
+            a.href = url; a.download = filename;
+            document.body.appendChild(a); a.click();
             setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
 
             submitBtn.textContent = "Klaar!";
@@ -305,29 +284,20 @@
       });
 
       // Download Cue Web-code (client-side) vanuit verborgen textarea
-      // Gebruikt bij voorkeur de laatst ontvangen serverfilename (outputEl.dataset.filename)
       document.querySelectorAll(".download-btn").forEach(btn => {
         btn.addEventListener("click", () => {
           const targetId = btn.dataset.target;
           const outputEl = document.getElementById(targetId);
-
           if (!outputEl || !outputEl.value) {
             alert("Nog geen code beschikbaar! Maak eerst de export.");
             return;
           }
-
-          const filename =
-            outputEl.dataset.filename ||
-            btn.dataset.filename ||
-            "export.txt";
-
+          const filename = outputEl.dataset.filename || btn.dataset.filename || "export.txt";
           const blob = new Blob([outputEl.value], { type: "text/plain;charset=utf-8" });
           const url  = URL.createObjectURL(blob);
           const a    = document.createElement("a");
-          a.href = url;
-          a.download = filename;
-          document.body.appendChild(a);
-          a.click();
+          a.href = url; a.download = filename;
+          document.body.appendChild(a); a.click();
           setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
         });
       });

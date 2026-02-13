@@ -3,7 +3,7 @@
 
 Gecombineerde Flask‑webapp met twee tools:
 - **DL amateurvoetbal tool** → `/convert/amateur`
-- **Amateurvoetbal online (Cue Print → Cue Web)** → `/convert/amateur-online`
+- **Amateurvoetbal online (Cue Print → Word)** → `/convert/amateur-online`
 - **DL regiosport tool** → `/convert/regiosport`
 
 ## Lokaal draaien

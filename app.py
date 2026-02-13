@@ -1,11 +1,10 @@
-from flask import Flask, render_template, request, Response, abort, send_file, after_this_request
+from flask import Flask, render_template, request, Response, abort
 from converter_regiosport import excel_to_txt_regiosport
 from converter_amateur import excel_to_txt_amateur
 
-# Cue Print -> DOCX converter (Amateur online)
-from converter_amateur_online import cueprint_txt_to_docx
-
-from converter_topscorers import extract_text_from_upload_bytes, topscorers_text_to_cueweb_html
+# Cue Print -> Cue Web converter (Optie 1: volledige classnamen)
+from converter_amateur_online import cueprint_txt_to_docx_bytes
+from converter_topscorers import extract_text_from_upload, topscorers_text_to_cueweb_html
 
 from openpyxl import Workbook
 import io
@@ -14,8 +13,6 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from urllib.parse import quote
 import re
-import os
-import tempfile
 
 app = Flask(__name__)
 
@@ -33,12 +30,12 @@ app = Flask(__name__)
 #
 # Gevraagd vaste formats:
 # - converter_amateur          -> YYYYMMDD_cue_print_uitslagen_amateurs.txt
-# - converter_amateur_online   -> YYYYMMDD_cue_web_uitslagen_amateurs.docx
+# - converter_amateur_online   -> YYYYMMDD_cue_web_uitslagen_amateurs.txt
 # - converter_regiosport       -> YYYYMMDD_cue_print_uitslagen_regiosport.txt
 # - converter_topscorers       -> YYYYMMDD_cue_web_topscorers_amateurs.txt
 
 AMATEUR_OUTPUT_PATTERN = "{date}_cue_print_uitslagen_amateurs.txt"
-AMATEUR_ONLINE_OUTPUT_PATTERN = "{date}_cue_web_uitslagen_amateurs.docx"
+AMATEUR_ONLINE_OUTPUT_PATTERN = "{date}_cue_word_uitslagen_amateurs.docx"
 REGIOSPORT_OUTPUT_PATTERN = "{date}_cue_print_uitslagen_regiosport.txt"
 TOPSCORERS_OUTPUT_PATTERN = "{date}_cue_web_topscorers_amateurs.txt"
 
@@ -124,7 +121,7 @@ def convert_amateur():
 
 @app.post("/convert/amateur-online")
 def convert_amateur_online():
-    """Converteer Cue Print-uitvoer (txt) naar DOCX (download)."""
+    """Converteer Cue Print-uitvoer (txt met tags) naar Word (.docx)."""
     file = request.files.get("file_amateur_online")
     if not file or file.filename == "":
         return abort(400, "Geen bestand geüpload (Amateurvoetbal online).")
@@ -140,39 +137,14 @@ def convert_amateur_online():
             )
 
         content_in = raw.decode("utf-8", errors="replace")
-
-        # Maak tijdelijk docx-bestand
-        fd, out_path = tempfile.mkstemp(suffix=".docx", prefix="uitslagen_")
-        os.close(fd)
-
-        # Genereer docx
-        cueprint_txt_to_docx(content_in, out_path)
-
+        docx_bytes, _stats = cueprint_txt_to_docx_bytes(content_in)
     except Exception as e:
-        # Probeer tempbestand op te ruimen als het bestaat
-        try:
-            if "out_path" in locals() and out_path and os.path.exists(out_path):
-                os.remove(out_path)
-        except OSError:
-            pass
         return abort(400, f"Kon Amateurvoetbal online-bestand niet verwerken: {e}")
 
     out_name = _build_output_filename(AMATEUR_ONLINE_OUTPUT_PATTERN, file.filename or "")
 
-    # Ruim tempbestand op na response
-    @after_this_request
-    def cleanup(response):
-        try:
-            if out_path and os.path.exists(out_path):
-                os.remove(out_path)
-        except OSError:
-            pass
-        return response
-
-    return send_file(
-        out_path,
-        as_attachment=True,
-        download_name=out_name,
+    return Response(
+        docx_bytes,
         mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={"Content-Disposition": _content_disposition_attachment(out_name)},
     )
@@ -206,7 +178,7 @@ def convert_topscorers():
                 "Verkeerd bestand: dit lijkt geen .txt of .docx. Upload een tekstbestand (Word of Kladblok).",
             )
 
-        text_in = extract_text_from_upload_bytes(raw, file.filename or "")
+        text_in = extract_text_from_upload(raw, file.filename or "")
         html_out = topscorers_text_to_cueweb_html(text_in)
     except Exception as e:
         return abort(400, f"Kon topscorers-bestand niet verwerken: {e}")
