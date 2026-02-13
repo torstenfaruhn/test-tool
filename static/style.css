@@ -201,3 +201,8 @@ html.dark .file{ color:#000; }         /* ook zwart in dark mode bij witte knop 
 }
 
 footer{ margin-top:.25rem; color:var(--muted); text-align:center; font-size:.9rem; }
+
+.hint--center{
+  text-align: center;
+  margin: 12px 0 0 0;
+}
