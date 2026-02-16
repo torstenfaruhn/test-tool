@@ -2,7 +2,7 @@
 Amateurvoetbal topscorers: tekstbestand (.txt/.docx) -> Word (.docx)
 
 Doel (zoals TOPSCORERS voorbeeld.docx):
-- Per sectie (kop met 'KLASSE' of 'DIVISIE') start de genummerde lijst opnieuw bij 1.
+- Per sectiekop (kop met 'KLASSE' of 'DIVISIE') start de genummerde lijst opnieuw bij 1.
 - Binnen een sectie: elk nieuw doelpunten-aantal => nieuw lijstnummer (Enter = nieuwe paragraaf).
 - Spelers met hetzelfde aantal doelpunten => binnen hetzelfde nummer met Shift+Enter (soft line break).
 - Alleen het lijstnummer (bijv. "1.") is vet; alle tekst in het item is regular.
@@ -36,13 +36,10 @@ GOALS_RE = re.compile(r"\s*-\s*(\d+)\s+doelpunt(?:en)?\s*$", re.IGNORECASE)
 def looks_like_player_stat_line(line: str) -> bool:
     s = line.strip()
     lower = s.lower()
-    # Heuristiek: spelerregels hebben vaak "(...)"
     if "(" in s and ")" in s:
         return True
-    # Of bevatten "- <getal> doelpunt(en)"
     if GOALS_RE.search(s):
         return True
-    # Of bevatten "-" plus een getal en het woord "doelpunt"
     if "-" in s and re.search(r"\b\d+\b", s) and "doelpunt" in lower:
         return True
     return False
@@ -52,14 +49,11 @@ def is_section_heading(line: str) -> bool:
     s = line.strip()
     if not s:
         return False
-    # Als de regel begint met "1." is het geen sectiekop
     if NUMBER_RE.match(s):
         return False
     upper = s.upper()
-    # Sectiekoppen bevatten KLASSE of DIVISIE
     if "KLASSE" not in upper and "DIVISIE" not in upper:
         return False
-    # Maar spelerregels kunnen ook 'divisie/klasse' bevatten (bv. in clubnaam/omschrijving)
     if looks_like_player_stat_line(s):
         return False
     return True
@@ -73,14 +67,13 @@ def parse_sections(text: str) -> List[Tuple[str, List[List[str]]]]:
     """
     Parseer inputtekst naar secties (titel + groepen regels).
 
-    Belangrijk:
-    - Headings: regels met 'KLASSE' of 'DIVISIE'.
+    Regels:
+    - Sectiekoppen: regels met 'KLASSE' of 'DIVISIE'.
     - Een regel met '- <N> doelpunt(en)' start (of wisselt) de huidige goals-groep.
     - Regels zonder goals-suffix horen bij de laatst geziene goals-groep (zelfde lijstnummer).
-    - Als de bron toch met '1.' werkt, ondersteunen we dat ook:
-      een nieuwe '1.' start altijd een nieuwe groep (nieuw lijstnummer).
+    - Legacy ondersteuning: een regel die begint met '1.' start altijd een nieuwe groep.
 
-    De volgorde uit de bron blijft exact behouden.
+    Volgorde uit de bron blijft exact behouden.
     """
     lines = text.splitlines()
 
@@ -138,7 +131,7 @@ def parse_sections(text: str) -> List[Tuple[str, List[List[str]]]]:
                 current_group = [line]
                 current_goals = goals
             else:
-                # Zelfde goals, maar deze regel bevat ook het suffix => dezelfde groep
+                # Zelfde goals, maar opnieuw suffix => zelfde groep
                 if not current_group:
                     current_group = [line]
                 else:
@@ -146,7 +139,6 @@ def parse_sections(text: str) -> List[Tuple[str, List[List[str]]]]:
         else:
             # Geen goals suffix: hoort bij huidige groep (Shift+Enter)
             if not current_group:
-                # Defensief: start toch een groep zodat we geen regels verliezen
                 current_group = [line]
             else:
                 current_group.append(line)
@@ -157,66 +149,49 @@ def parse_sections(text: str) -> List[Tuple[str, List[List[str]]]]:
 
 
 # ----------------------------
-# DOCX numbering (robuust: nieuw numId per sectie)
+# DOCX numbering (robuust + geforceerde herstart per sectie)
 # ----------------------------
-def _new_numbering_numid_for_section(doc: Document, bold_number: bool = True) -> int:
+def _ensure_abstract_decimal_numbering(doc: Document, bold_number: bool = True) -> int:
     """
-    Maak een nieuwe numbering instance (numId) die start bij 1.
-    Robuust: elk numId is een aparte lijst (herstart per sectie).
-
-    bold_number=True zet alleen het nummer vet via numbering rPr.
+    Maak een abstractNum voor een single-level decimal list met "%1."
+    (optioneel) bold nummer. Geeft abstractNumId terug.
     """
-    numbering_part = doc.part.numbering_part
-    numbering = numbering_part.numbering_definitions._numbering  # CT_Numbering
+    numbering = doc.part.numbering_part.numbering_definitions._numbering  # CT_Numbering
 
-    # Bepaal nieuwe IDs
     existing_abs = [
         int(n.get(qn("w:abstractNumId")))
         for n in numbering.findall(qn("w:abstractNum"))
         if n.get(qn("w:abstractNumId")) is not None
     ]
-    existing_num = [
-        int(n.get(qn("w:numId")))
-        for n in numbering.findall(qn("w:num"))
-        if n.get(qn("w:numId")) is not None
-    ]
     abstract_id = (max(existing_abs) + 1) if existing_abs else 1
-    num_id = (max(existing_num) + 1) if existing_num else 1
 
-    # <w:abstractNum w:abstractNumId="...">
     abstract = OxmlElement("w:abstractNum")
     abstract.set(qn("w:abstractNumId"), str(abstract_id))
 
-    # <w:multiLevelType w:val="singleLevel"/>
     mlt = OxmlElement("w:multiLevelType")
     mlt.set(qn("w:val"), "singleLevel")
     abstract.append(mlt)
 
-    # <w:lvl w:ilvl="0">
     lvl = OxmlElement("w:lvl")
     lvl.set(qn("w:ilvl"), "0")
 
-    # Start bij 1
     start = OxmlElement("w:start")
     start.set(qn("w:val"), "1")
     lvl.append(start)
 
-    # Decimal numbering
     numfmt = OxmlElement("w:numFmt")
     numfmt.set(qn("w:val"), "decimal")
     lvl.append(numfmt)
 
-    # Tekst van het nummer: "%1."
     lvltext = OxmlElement("w:lvlText")
     lvltext.set(qn("w:val"), "%1.")
     lvl.append(lvltext)
 
-    # Spatie na nummer
     suff = OxmlElement("w:suff")
     suff.set(qn("w:val"), "space")
     lvl.append(suff)
 
-    # Alleen het nummer vet maken
+    # Alleen het nummer vet
     if bold_number:
         rpr = OxmlElement("w:rPr")
         b = OxmlElement("w:b")
@@ -224,30 +199,54 @@ def _new_numbering_numid_for_section(doc: Document, bold_number: bool = True) ->
         rpr.append(b)
         lvl.append(rpr)
 
-    # Inspringing (net als standaard lijst)
+    # standaard-inspringing
     ppr = OxmlElement("w:pPr")
     ind = OxmlElement("w:ind")
-    ind.set(qn("w:left"), "720")     # ~0.5 inch
-    ind.set(qn("w:hanging"), "360")  # hangend
+    ind.set(qn("w:left"), "720")
+    ind.set(qn("w:hanging"), "360")
     ppr.append(ind)
     lvl.append(ppr)
 
     abstract.append(lvl)
     numbering.append(abstract)
+    return abstract_id
 
-    # <w:num w:numId="..."><w:abstractNumId w:val="..."/></w:num>
+
+def _new_numid_starting_at_1(doc: Document, abstract_id: int) -> int:
+    """
+    Maak een nieuw numId voor een nieuwe lijst (verwijst naar abstract_id)
+    en forceer start bij 1 via startOverride. Dit voorkomt doortellen.
+    """
+    numbering = doc.part.numbering_part.numbering_definitions._numbering
+
+    existing_num = [
+        int(n.get(qn("w:numId")))
+        for n in numbering.findall(qn("w:num"))
+        if n.get(qn("w:numId")) is not None
+    ]
+    num_id = (max(existing_num) + 1) if existing_num else 1
+
     num = OxmlElement("w:num")
     num.set(qn("w:numId"), str(num_id))
+
     absref = OxmlElement("w:abstractNumId")
     absref.set(qn("w:val"), str(abstract_id))
     num.append(absref)
-    numbering.append(num)
 
+    # Forceer herstart bij 1 op level 0
+    lvl_override = OxmlElement("w:lvlOverride")
+    lvl_override.set(qn("w:ilvl"), "0")
+    start_override = OxmlElement("w:startOverride")
+    start_override.set(qn("w:val"), "1")
+    lvl_override.append(start_override)
+    num.append(lvl_override)
+
+    numbering.append(num)
     return num_id
 
 
 def _apply_numid_to_paragraph(paragraph, num_id: int, ilvl: int = 0) -> None:
-    """Koppel een paragraaf aan een nummering (numId) op level ilvl."""
+    """Koppel een paragraaf aan nummering (numId) op level ilvl."""
     p = paragraph._p
     ppr = p.get_or_add_pPr()
 
@@ -281,16 +280,20 @@ def topscorers_text_to_docx_bytes(text: str) -> bytes:
     - Daarna: per goals-groep één genummerde paragraaf (Enter => nieuw item)
       - group[0] als eerste regel (regular tekst)
       - group[1:] als extra regels met Shift+Enter binnen hetzelfde item
+    - Nummering herstart per sectie geforceerd bij 1 (startOverride).
     """
     doc = Document()
     sections = parse_sections(text)
+
+    # één keer de abstract list-stijl aanmaken (nummer bold, tekst regular)
+    abstract_id = _ensure_abstract_decimal_numbering(doc, bold_number=True)
 
     for title, groups in sections:
         # Sectiekop
         doc.add_paragraph(title, style="Heading 3")
 
-        # Robuuste herstart: nieuw numId per sectie
-        num_id = _new_numbering_numid_for_section(doc, bold_number=True)
+        # ALTIJD opnieuw starten bij 1 per sectie (divisie én klasse)
+        num_id = _new_numid_starting_at_1(doc, abstract_id)
 
         # Eén paragraaf per groep (nieuw nummer per nieuw goals-aantal)
         for group in groups:
@@ -342,21 +345,14 @@ def extract_text_from_upload(raw: bytes, filename: str) -> str:
 
             return "\n".join(lines)
 
-    # default: txt
     return raw.decode("utf-8", errors="replace")
 
 
-# ------------------------------------------------------------
-# Compat: bytes-uploader API (gebruikt door app.py)
-# ------------------------------------------------------------
 def extract_text_from_upload_bytes(raw: bytes, filename: str) -> str:
-    """Lees upload-bytes en geef tekst terug (stabiele API voor app.py)."""
+    """Compat API voor app.py."""
     return extract_text_from_upload(raw, filename)
 
 
-# ------------------------------------------------------------
-# Backward compat (optioneel): oude HTML functie is verwijderd
-# ------------------------------------------------------------
 def topscorers_text_to_cueweb_html(text: str) -> str:
     raise ImportError(
         "topscorers_text_to_cueweb_html is verwijderd. Gebruik topscorers_text_to_docx_bytes."
