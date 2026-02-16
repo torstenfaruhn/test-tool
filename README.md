@@ -1,9 +1,10 @@
 
 # DL sporttools (Regiosport + Amateurvoetbal)
 
-Gecombineerde Flask‑webapp met twee tools:
+Gecombineerde Flask‑webapp met tools:
 - **DL amateurvoetbal tool** → `/convert/amateur`
 - **Amateurvoetbal online (Cue Print → Word)** → `/convert/amateur-online`
+- **Amateurvoetbal topscorers (tekst → Word)** → `/convert/topscorers`
 - **DL regiosport tool** → `/convert/regiosport`
 
 ## Lokaal draaien
@@ -22,8 +23,9 @@ python app.py  # http://localhost:8000
 ## Mappering
 - `converter_regiosport.py` – definitieve omzetting voor Regiosport (uit je notebook).
 - `converter_amateur.py` – omzetting voor Amateurvoetbal (Excel → Cue Print).
-- `converter_amateur_online.py` – Cue Print (txt) → Cue Web (HTML) (gebaseerd op `02 colab_tag_converter_with_br_spacing.ipynb`).
-- `templates/index.html` – gecombineerde UI met twee blokken.
+- `converter_amateur_online.py` – Cue Print (txt) → Word (.docx) voor Cue Web.
+- `converter_topscorers.py` – Topscorers (txt/docx) → Word (.docx) voor Cue Web.
+- `templates/index.html` – gecombineerde UI met meerdere blokken.
 - `static/style.css` – stijlen.
 - `notebooks/` – referentie-notebooks (niet gebruikt door de app).
 

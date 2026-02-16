@@ -37,7 +37,7 @@ app = Flask(__name__)
 AMATEUR_OUTPUT_PATTERN = "{date}_cue_print_uitslagen_amateurs.txt"
 AMATEUR_ONLINE_OUTPUT_PATTERN = "{date}_cue_word_uitslagen_amateurs.docx"
 REGIOSPORT_OUTPUT_PATTERN = "{date}_cue_print_uitslagen_regiosport.txt"
-TOPSCORERS_OUTPUT_PATTERN = "{date}_cue_web_topscorers_amateurs.txt"
+TOPSCORERS_OUTPUT_PATTERN = "{date}_cue_word_topscorers_amateurs.docx"
 
 
 def _sanitize_stem(filename: str) -> str:
@@ -163,7 +163,7 @@ def _xls_bytes_from_workbook(wb: Workbook) -> bytes:
 
 @app.post("/convert/topscorers")
 def convert_topscorers():
-    """Converteer topscorers-tekst (.txt/.docx) naar Cue Web HTML-code (als .txt voor copy/paste)."""
+    """Converteer topscorers-tekst (.txt/.docx) naar Word (.docx) voor Cue Web."""
     file = request.files.get("file_topscorers")
     if not file or file.filename == "":
         return abort(400, "Geen bestand geüpload (Topscorers).")
@@ -179,15 +179,15 @@ def convert_topscorers():
             )
 
         text_in = extract_text_from_upload_bytes(raw, file.filename or "")
-        html_out = topscorers_text_to_cueweb_html(text_in)
+        docx_bytes = topscorers_text_to_docx_bytes(text_in)
     except Exception as e:
         return abort(400, f"Kon topscorers-bestand niet verwerken: {e}")
 
     out_name = _build_output_filename(TOPSCORERS_OUTPUT_PATTERN, file.filename or "")
 
     return Response(
-        html_out,
-        mimetype="text/plain; charset=utf-8",
+        docx_bytes,
+        mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={"Content-Disposition": _content_disposition_attachment(out_name)},
     )
 

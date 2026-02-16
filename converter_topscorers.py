@@ -1,53 +1,27 @@
-"""Amateurvoetbal topscorers: tekstbestand (.txt/.docx) -> Cue Web HTML-code.
+"""Amateurvoetbal topscorers: tekstbestand (.txt/.docx) -> Word (.docx) voor Cue Web.
 
 Gebaseerd op notebook:
 `12 klassement_html_converter_v12 - integratie docx.ipynb`.
 
-De output is HTML-code die als tekst (.txt) wordt aangeboden zodat deze eenvoudig te kopiëren/plakken is.
+Output: een Word-document met per divisie/klasse een kop (bold) en een genummerde lijst
+waarbij de nummering per sectie opnieuw start bij 1. Alleen het lijstnummer ("1.") is bold.
+Spelers met gelijk aantal doelpunten staan onder hetzelfde nummer met een soft line break
+(Shift+Enter).
 """
 
 from __future__ import annotations
 
-import html as _html
 import re
 import tempfile
-from typing import Tuple, List
+from io import BytesIO
+from typing import List, Tuple
 
 from docx import Document
-
-# HTML-heading voor klasse/divisie-koppen (Cue Web)
-HEADING_TEMPLATE = '<h4 class="Heading_heading__okScq Heading_heading--sm__bGPWw heading_articleSubheading__HfjIx heading_sm__u3F2n" data-testid="article-subhead">{title}</h4>'
-
-# Ingebouwd HTML-sjabloon voor de genummerde lijst.
-# We gebruiken een stabiele (minimale) variant zonder hashed classnamen voor de <ol>/<li>,
-# maar behouden de Paragraph-classes voor de inhoudsregels.
-TEMPLATE_HTML = '<ol data-testid="numbered-list">\n<li>\n<p class="Paragraph_paragraph__exhQA Paragraph_paragraph--default-sm-default__jy0uG articleParagraph">{content}</p>\n</li>\n</ol>'
-
-NUMBER_RE = re.compile(r"^\s*\d+\.\s")
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 
 
-def parse_html_template(template_text: str) -> Tuple[str, str, str]:
-    """Splits een <ol> template op in: prefix, item_template, suffix.
-
-    item_template bevat {content} als placeholder voor de inhoud.
-    """
-    m_ol = re.search(r"(<ol[^>]*>)(.*?)(</ol>)", template_text, re.S)
-    if not m_ol:
-        raise ValueError("Kon geen <ol>...</ol> in het sjabloon vinden.")
-    prefix = template_text[: m_ol.start(2)]
-    suffix = template_text[m_ol.end(2):]
-
-    m_li = re.search(r"(<li\b.*?</li>)", m_ol.group(2), re.S)
-    if not m_li:
-        raise ValueError("Kon geen <li> in het sjabloon vinden.")
-    li_block = m_li.group(1)
-
-    m_p = re.search(r"(<p\b[^>]*>)(.*?)(</p>)", li_block, re.S)
-    if not m_p:
-        raise ValueError("Kon geen <p> in het <li>-sjabloon vinden.")
-
-    item_template = li_block[: m_p.start(2)] + "{content}" + li_block[m_p.end(2):]
-    return prefix, item_template, suffix
+NUMBER_RE = re.compile(r"^\s*\d+\.\s*")
 
 
 def looks_like_player_stat_line(line: str) -> bool:
@@ -75,17 +49,20 @@ def is_section_heading(line: str) -> bool:
 
 
 def strip_source_rank_number(line: str) -> str:
-    return re.sub(r"^\s*\d+\.\s*", "", line, count=1)
+    """Verwijder een bron-rangnummer ('1. ') uit een regel."""
+    return NUMBER_RE.sub("", line).strip()
 
 
-def parse_sections(text: str):
+def parse_sections(text: str) -> List[Tuple[str, List[List[str]]]]:
     """Parseer inputtekst naar secties (titel + groepen regels).
 
-    Herkent headings met 'KLASSE' of 'DIVISIE'. Een regel '1. ...' start een nieuwe speler-groep.
+    - Heading: regels met 'KLASSE' of 'DIVISIE'
+    - Een regel '1. ...' start een nieuwe speler-groep.
+    - Regels erna horen bij dezelfde groep (gelijk aantal goals) en krijgen een soft line break.
     """
     lines = text.splitlines()
-    sections = []
-    current_title = None
+    sections: List[Tuple[str, List[List[str]]]] = []
+    current_title: str | None = None
     current_groups: List[List[str]] = []
     current_group: List[str] = []
 
@@ -126,23 +103,157 @@ def parse_sections(text: str):
     return sections
 
 
-def topscorers_text_to_cueweb_html(text: str) -> str:
-    """Converteer topscorers tekst naar Cue Web HTML-code."""
-    prefix, item_template, suffix = parse_html_template(TEMPLATE_HTML)
+# -----------------------------
+# DOCX numbering (robust)
+# -----------------------------
+
+def _add_abstract_numbering_number_bold(document: Document) -> int:
+    """Maak een abstract numbering definitie met decimal numbering en bold nummering.
+
+    Retourneert abstractNumId.
+    """
+    numbering = document.part.numbering_part.numbering_definitions._numbering  # type: ignore[attr-defined]
+
+    existing_ids = []
+    for an in numbering.findall(qn("w:abstractNum")):
+        try:
+            existing_ids.append(int(an.get(qn("w:abstractNumId"))))
+        except Exception:
+            pass
+    abstract_id = (max(existing_ids) + 1) if existing_ids else 1
+
+    abstract = OxmlElement("w:abstractNum")
+    abstract.set(qn("w:abstractNumId"), str(abstract_id))
+
+    # single level (0)
+    lvl = OxmlElement("w:lvl")
+    lvl.set(qn("w:ilvl"), "0")
+
+    start = OxmlElement("w:start")
+    start.set(qn("w:val"), "1")
+    lvl.append(start)
+
+    numFmt = OxmlElement("w:numFmt")
+    numFmt.set(qn("w:val"), "decimal")
+    lvl.append(numFmt)
+
+    lvlText = OxmlElement("w:lvlText")
+    lvlText.set(qn("w:val"), "%1.")
+    lvl.append(lvlText)
+
+    # Nummering bold (alleen de "1.")
+    rPr = OxmlElement("w:rPr")
+    b = OxmlElement("w:b")
+    b.set(qn("w:val"), "1")
+    rPr.append(b)
+    lvl.append(rPr)
+
+    # minimale inspringing, vergelijkbaar met Word default list
+    pPr = OxmlElement("w:pPr")
+    ind = OxmlElement("w:ind")
+    ind.set(qn("w:left"), "720")   # 0.5 inch
+    ind.set(qn("w:hanging"), "360")  # 0.25 inch
+    pPr.append(ind)
+    lvl.append(pPr)
+
+    abstract.append(lvl)
+    numbering.append(abstract)
+    return abstract_id
+
+
+def _add_numbering_instance(document: Document, abstract_num_id: int) -> int:
+    """Maak een nieuwe numbering instance (numId) voor een sectie, start altijd bij 1."""
+    numbering = document.part.numbering_part.numbering_definitions._numbering  # type: ignore[attr-defined]
+
+    existing_ids = []
+    for n in numbering.findall(qn("w:num")):
+        try:
+            existing_ids.append(int(n.get(qn("w:numId"))))
+        except Exception:
+            pass
+    num_id = (max(existing_ids) + 1) if existing_ids else 1
+
+    num = OxmlElement("w:num")
+    num.set(qn("w:numId"), str(num_id))
+
+    abstract_ref = OxmlElement("w:abstractNumId")
+    abstract_ref.set(qn("w:val"), str(abstract_num_id))
+    num.append(abstract_ref)
+
+    numbering.append(num)
+    return num_id
+
+
+def _apply_num_id(paragraph, num_id: int, level: int = 0) -> None:
+    """Koppel een paragraph aan een numbering instance."""
+    p = paragraph._p  # lxml element
+    pPr = p.get_or_add_pPr()
+    numPr = pPr.find(qn("w:numPr"))
+    if numPr is None:
+        numPr = OxmlElement("w:numPr")
+        pPr.append(numPr)
+
+    ilvl = numPr.find(qn("w:ilvl"))
+    if ilvl is None:
+        ilvl = OxmlElement("w:ilvl")
+        numPr.append(ilvl)
+    ilvl.set(qn("w:val"), str(level))
+
+    numId = numPr.find(qn("w:numId"))
+    if numId is None:
+        numId = OxmlElement("w:numId")
+        numPr.append(numId)
+    numId.set(qn("w:val"), str(num_id))
+
+
+def topscorers_text_to_docx_bytes(text: str) -> bytes:
+    """Converteer topscorers tekst naar een Word-document (.docx) en geef bytes terug."""
     sections = parse_sections(text)
-    html_parts = []
+
+    doc = Document()
+
+    abstract_id = _add_abstract_numbering_number_bold(doc)
 
     for title, groups in sections:
-        html_parts.append(HEADING_TEMPLATE.format(title=_html.escape(title)))
-        items = []
+        # Sectiekop: bold, style Normal
+        p_head = doc.add_paragraph()
+        run = p_head.add_run(title)
+        run.bold = True
+
+        # Nummering per sectie opnieuw starten
+        num_id = _add_numbering_instance(doc, abstract_id)
+
         for group in groups:
-            safe_lines = [_html.escape(l, quote=False) for l in group]
-            inner = "<br>\n".join(safe_lines)
-            items.append(item_template.replace("{content}", inner))
-        html_parts.append(prefix + "\n" + "\n\n".join(items) + "\n" + suffix)
+            # één genummerde alinea per groep
+            p_item = doc.add_paragraph(style="Body Text")
+            _apply_num_id(p_item, num_id, level=0)
 
-    return "\n\n".join(html_parts).strip() + "\n"
+            if not group:
+                continue
 
+            # eerste regel
+            p_item.add_run(group[0])
+
+            # extra regels: soft line break (Shift+Enter)
+            for extra in group[1:]:
+                r = p_item.add_run()
+                r.add_break()  # line break binnen dezelfde alinea
+                p_item.add_run(extra)
+
+            # spacing zoals voorbeeld: lege regel na elk item
+            doc.add_paragraph("", style="Body Text")
+
+        # extra witregel na de sectie
+        doc.add_paragraph("")
+
+    bio = BytesIO()
+    doc.save(bio)
+    return bio.getvalue()
+
+
+# -----------------------------
+# Upload text extraction
+# -----------------------------
 
 def extract_text_from_upload(raw: bytes, filename: str) -> str:
     """Lees upload (.txt of .docx) en geef de tekstinhoud terug."""
@@ -152,28 +263,27 @@ def extract_text_from_upload(raw: bytes, filename: str) -> str:
             tmp.write(raw)
             tmp.flush()
             doc = Document(tmp.name)
-            lines = []
+            lines: List[str] = []
             for p in doc.paragraphs:
                 if p.text.strip():
                     lines.append(p.text)
             for table in doc.tables:
                 for row in table.rows:
                     for cell in row.cells:
-                        for ln in cell.text.splitlines():
-                            if ln.strip():
-                                lines.append(ln)
-            return "\n".join(lines)
+                        for p in cell.paragraphs:
+                            if p.text.strip():
+                                lines.append(p.text)
+            return "\n".join(lines).strip() + "\n"
+    else:
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            text = raw.decode("latin-1")
+        return text.strip() + "\n"
 
-    # default: txt
-    return raw.decode("utf-8", errors="replace")
 
-
-# ------------------------------------------------------------
-# Compat: bytes-uploader API (gebruikt door app.py)
-# ------------------------------------------------------------
 def extract_text_from_upload_bytes(raw: bytes, filename: str) -> str:
     """Lees upload-bytes en geef tekst terug.
     Wrapper voor extract_text_from_upload(...), zodat app.py een stabiele API heeft.
     """
     return extract_text_from_upload(raw, filename)
-
