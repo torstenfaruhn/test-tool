@@ -1,0 +1,41 @@
+NOTEBOOKS OVERZICHT:
+
+NIET ACTUEEL:
+02 colab_tag-converter_with_br_spacing.ipynb
+Converter voor Cue Print-uitslagen van het amateurvoetbal naar html-tagging voor Cue Web.
+Opm.: html-tagging heft wisselende variabelen en is niet betrouwbaar.
+
+ACTUEEL:
+04 cueprint_uitslagem-tags_to_word_colab.ipynb
+Converter voor Cue Print-uitslagen van het amateurvoetbal naar Word-document voor Cue Web.
+Opm.: Word-export werkt stabieler en gebruiksvriendelijker dan html-tagging via html-block in Cue Web. Word = copy/paste.
+
+NIET ACTUEEL:
+12 klassement_html_converter_v12 - integratie docx.ipynb
+Converter voor topscorers van het amateurvoetbal in Word naar html-tagging voor Cue Web.
+Opm.: html-tagging heft wisselende variabelen en is niet betrouwbaar.
+
+ACTUEEL:
+13_klassement-converter_docx_output_v3.ipynb
+Converter voor topscorers van het amateurvoetbal in Word naar Word-document voor Cue Web.
+Opm.: Word-export werkt stabieler en gebruiksvriendelijker dan html-tagging via html-block in Cue Web. Word = copy/paste.
+
+NIET ACTUEEL:
+DL_amateurvoetbal_tool.ipynb
+Converter voor Excel-document naar Cue Print-tagging.
+Opm.: Bekercompetitie ontbreekt.
+
+ACTUEEL:
+DL_amateurvoetbal_tool_BEKER.ipynb
+Converter voor Excel-document naar Cue Print-tagging.
+Opm.: inclusief bekercompetitie.
+
+NIET ACTUEEL:
+Regiosport_Notebook_voor_Colab.ipynb
+Converter voor regiosport-uitslagen in Excel-document naar Cue Print-tagging.
+Opm.: Leeg invoertabblad crasht.
+
+ACTUEEL:
+Regiosport_Notebook_voor_Colab_patched.ipynb
+Converter voor regiosport-uitslagen in Excel-document naar Cue Print-tagging.
+Opm.: Path voor crash bij leeg invoertabblad.
