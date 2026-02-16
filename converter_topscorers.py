@@ -289,8 +289,8 @@ def topscorers_text_to_docx_bytes(text: str) -> bytes:
     abstract_id = _ensure_abstract_decimal_numbering(doc, bold_number=True)
 
     for title, groups in sections:
-        # Sectiekop
-        p_title = doc.add_paragraph(style="Heading 3")
+        # Sectiekop: kapitalen + vet
+        p_title = doc.add_paragraph()
         r_title = p_title.add_run(title.upper())
         r_title.bold = True
 
