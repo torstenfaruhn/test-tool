@@ -112,7 +112,7 @@
         <section class="card">
           <div class="card__head">
             <h3>Amateurvoetbal: topscorers &gt; Cue Web</h3>
-            <p>Upload hier het tekstbestand (Word of Kladblok) met de topscorers. Je krijgt dan een Word-document waarvan je de inhoud direct als tekst in Cue Web kunt plakken.</p>
+            <p>Upload hier het tekstbestand (Word) met de topscorers. Je krijgt dan een Word-document waarvan je de inhoud direct als tekst in Cue Web kunt plakken.</p>
           </div>
 
           <form action="/convert/topscorers" method="post" enctype="multipart/form-data"
@@ -178,7 +178,7 @@
           '/convert/amateur': `${date}_cue_print_uitslagen_amateurs.txt`,
           '/convert/amateur-online': `${date}_cue_word_uitslagen_amateurs.docx`,
           '/convert/regiosport': `${date}_cue_print_uitslagen_regiosport.txt`,
-          '/convert/topscorers': `${date}_cue_web_topscorers_amateurs.txt`,
+          '/convert/topscorers': `${date}_cue_word_topscorers_amateurs.docx`,
         };
         return map[path] || null;
       }
