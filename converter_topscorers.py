@@ -290,7 +290,9 @@ def topscorers_text_to_docx_bytes(text: str) -> bytes:
 
     for title, groups in sections:
         # Sectiekop
-        doc.add_paragraph(title, style="Heading 3")
+        p_title = doc.add_paragraph(style="Heading 3")
+        r_title = p_title.add_run(title.upper())
+        r_title.bold = True
 
         # ALTIJD opnieuw starten bij 1 per sectie (divisie én klasse)
         num_id = _new_numid_starting_at_1(doc, abstract_id)
