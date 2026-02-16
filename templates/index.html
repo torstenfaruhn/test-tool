@@ -108,38 +108,31 @@
 
       
 
+        
         <section class="card">
           <div class="card__head">
-            <h3>Amateurvoetbal: topscorers tekstbestand &gt; Cue Web</h3>
-            <p>
-              Upload hier het tekstbestand (Word of Kladblok) met de topscorers. Je krijgt dan een tekstbestand waarvan je de inhoud in
-              een html-blok in Cue Web moet plakken.
-            </p>
+            <h3>Amateurvoetbal: topscorers &gt; Cue Web</h3>
+            <p>Upload hier het tekstbestand (Word of Kladblok) met de topscorers. Je krijgt dan een Word-document waarvan je de inhoud direct als tekst in Cue Web kunt plakken.</p>
           </div>
 
           <form action="/convert/topscorers" method="post" enctype="multipart/form-data"
                 class="upload js-convert"
                 data-target="topscorers-output"
-                data-filename="cue_web_export_topscorers.txt">
+                data-filename="cue_word_export_topscorers.docx">
             <label class="file btn-like" data-filepicker>
               <input type="file" name="file_topscorers" accept=".txt,.docx" required />
               <span class="file__label">Bestand kiezen</span>
             </label>
-            <button type="submit" class="btn btn-primary btn-like">Maak Cue Web-export</button>
+            <button type="submit" class="btn btn-primary btn-like">Maak Word export</button>
           </form>
 
           <textarea id="topscorers-output" class="visually-hidden" aria-hidden="true"></textarea>
 
-          <div class="actions actions--bottom">
-            <button class="btn btn-outline download-btn" data-target="topscorers-output"
-                    data-filename="cue_web_export_topscorers.txt">
-              Download Cue Web-code (txt)
-            </button>
-            <button class="btn btn-outline copy-btn" data-target="topscorers-output">
-              Kopieer direct de code
-            </button>
-          </div>
+          <p class="hint hint--center">
+            Tekst kopiëren: open het gedownloade Word-document, druk Ctrl+A en daarna Ctrl+C. Ga naar je artikel in Cue Web en plak de tekst in de broodtekst met Ctrl+V.
+          </p>
         </section>
+
 
       </section>
 
