@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, Response, abort
 from converter_regiosport import excel_to_txt_regiosport
 from converter_amateur import excel_to_txt_amateur
 
-# Cue Print -> Cue Web converter (Optie 1: volledige classnamen)
+# Cue Print -> Cue Web converter
 from converter_amateur_online import cueprint_txt_to_docx_bytes
 from converter_topscorers import extract_text_from_upload_bytes, topscorers_text_to_docx_bytes
 
@@ -21,19 +21,12 @@ app = Flask(__name__)
 # Output bestandsnamen
 # -----------------------------
 #
-# Pas deze patterns aan om de vaste naamopbouw per converter te bepalen.
-# Beschikbare placeholders:
+# Placeholders:
 # - {date}: YYYYMMDD (Europe/Amsterdam)
 # - {date_dash}: YYYY-MM-DD (Europe/Amsterdam)
 # - {time}: HHMM (24u, Europe/Amsterdam)
-# - {stem}: bestandsnaam van de upload zónder extensie (geschoond)
+# - {stem}: uploadnaam zonder extensie (geschoond)
 #
-# Gevraagd vaste formats:
-# - converter_amateur          -> YYYYMMDD_cue_print_uitslagen_amateurs.txt
-# - converter_amateur_online   -> YYYYMMDD_cue_web_uitslagen_amateurs.txt
-# - converter_regiosport       -> YYYYMMDD_cue_print_uitslagen_regiosport.txt
-# - converter_topscorers       -> YYYYMMDD_cue_web_topscorers_amateurs.txt
-
 AMATEUR_OUTPUT_PATTERN = "{date}_cue_print_uitslagen_amateurs.txt"
 AMATEUR_ONLINE_OUTPUT_PATTERN = "{date}_cue_word_uitslagen_amateurs.docx"
 REGIOSPORT_OUTPUT_PATTERN = "{date}_cue_print_uitslagen_regiosport.txt"
@@ -43,9 +36,7 @@ TOPSCORERS_OUTPUT_PATTERN = "{date}_cue_word_topscorers_amateurs.docx"
 def _sanitize_stem(filename: str) -> str:
     """Maak een veilige, korte bestands-stem op basis van de uploadnaam."""
     name = (filename or "").strip()
-    # haal pad-separators weg
     name = name.split("/")[-1].split("\\")[-1]
-    # drop extensie
     if "." in name:
         name = name.rsplit(".", 1)[0]
 
@@ -72,17 +63,11 @@ def _build_output_filename(pattern: str, uploaded_filename: str) -> str:
     )
 
 
-# -----------------------------
-# UI
-# -----------------------------
 @app.get("/")
 def index():
     return render_template("index.html")
 
 
-# -----------------------------
-# Convert endpoints
-# -----------------------------
 @app.post("/convert/regiosport")
 def convert_regiosport():
     file = request.files.get("file_regio")
@@ -150,9 +135,6 @@ def convert_amateur_online():
     )
 
 
-# -----------------------------
-# Template (leeg invoerdocument) endpoints
-# -----------------------------
 def _xls_bytes_from_workbook(wb: Workbook) -> bytes:
     """Helper: zet Workbook om naar bytes voor download."""
     bio = io.BytesIO()
@@ -192,8 +174,5 @@ def convert_topscorers():
     )
 
 
-# -----------------------------
-# Main (alleen voor lokaal testen)
-# -----------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=False)
