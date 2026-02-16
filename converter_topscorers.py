@@ -1,11 +1,12 @@
 """
 Amateurvoetbal topscorers: tekstbestand (.txt/.docx) -> Word (.docx)
 
-Doel:
+Doel (zoals TOPSCORERS voorbeeld.docx):
 - Per sectie (kop met 'KLASSE' of 'DIVISIE') start de genummerde lijst opnieuw bij 1.
-- Per doelpunten-groep: één paragraaf (Enter) = nieuw lijstitem (1., 2., 3., ...).
-- Spelers met gelijk aantal doelpunten: binnen hetzelfde lijstitem met Shift+Enter (soft line break).
-- Alleen het lijstnummer ("1.") is vet. De tekst erna is regular.
+- Binnen een sectie: elk nieuw doelpunten-aantal => nieuw lijstnummer (Enter = nieuwe paragraaf).
+- Spelers met hetzelfde aantal doelpunten => binnen hetzelfde nummer met Shift+Enter (soft line break).
+- Alleen het lijstnummer (bijv. "1.") is vet; alle tekst in het item is regular.
+- Volgorde uit de bron blijft exact behouden (geen sortering).
 """
 
 from __future__ import annotations
@@ -19,18 +20,29 @@ from docx import Document
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
+# Legacy: sommige bronnen beginnen items met "1." (optioneel)
+NUMBER_RE = re.compile(r"^\s*\d+\.\s*")
 
-NUMBER_RE = re.compile(r"^\s*\d+\.\s")
+# Herken doelpunten-aantal op regels die een nieuw item moeten starten
+# Voorbeelden die matchen:
+# "... - 14 doelpunten"
+# "...-14 doelpunt"
+GOALS_RE = re.compile(r"\s*-\s*(\d+)\s+doelpunt(?:en)?\s*$", re.IGNORECASE)
 
 
 # ----------------------------
-# Parsing (blijft grotendeels gelijk)
+# Parsing helpers
 # ----------------------------
 def looks_like_player_stat_line(line: str) -> bool:
     s = line.strip()
     lower = s.lower()
+    # Heuristiek: spelerregels hebben vaak "(...)"
     if "(" in s and ")" in s:
         return True
+    # Of bevatten "- <getal> doelpunt(en)"
+    if GOALS_RE.search(s):
+        return True
+    # Of bevatten "-" plus een getal en het woord "doelpunt"
     if "-" in s and re.search(r"\b\d+\b", s) and "doelpunt" in lower:
         return True
     return False
@@ -40,11 +52,14 @@ def is_section_heading(line: str) -> bool:
     s = line.strip()
     if not s:
         return False
+    # Als de regel begint met "1." is het geen sectiekop
     if NUMBER_RE.match(s):
         return False
     upper = s.upper()
+    # Sectiekoppen bevatten KLASSE of DIVISIE
     if "KLASSE" not in upper and "DIVISIE" not in upper:
         return False
+    # Maar spelerregels kunnen ook 'divisie/klasse' bevatten (bv. in clubnaam/omschrijving)
     if looks_like_player_stat_line(s):
         return False
     return True
@@ -55,17 +70,25 @@ def strip_source_rank_number(line: str) -> str:
 
 
 def parse_sections(text: str) -> List[Tuple[str, List[List[str]]]]:
-    """Parseer inputtekst naar secties (titel + groepen regels).
+    """
+    Parseer inputtekst naar secties (titel + groepen regels).
 
-    - Headings: regels met 'KLASSE' of 'DIVISIE'
-    - Een regel '1. ...' start een nieuwe speler-groep (nieuw lijstitem).
-    - Regels erna horen bij dezelfde groep (zelfde lijstitem, later Shift+Enter).
+    Belangrijk:
+    - Headings: regels met 'KLASSE' of 'DIVISIE'.
+    - Een regel met '- <N> doelpunt(en)' start (of wisselt) de huidige goals-groep.
+    - Regels zonder goals-suffix horen bij de laatst geziene goals-groep (zelfde lijstnummer).
+    - Als de bron toch met '1.' werkt, ondersteunen we dat ook:
+      een nieuwe '1.' start altijd een nieuwe groep (nieuw lijstnummer).
+
+    De volgorde uit de bron blijft exact behouden.
     """
     lines = text.splitlines()
+
     sections: List[Tuple[str, List[List[str]]]] = []
     current_title: Optional[str] = None
     current_groups: List[List[str]] = []
     current_group: List[str] = []
+    current_goals: Optional[int] = None
 
     def flush_group() -> None:
         nonlocal current_group, current_groups
@@ -74,29 +97,56 @@ def parse_sections(text: str) -> List[Tuple[str, List[List[str]]]]:
             current_group = []
 
     def flush_section() -> None:
-        nonlocal current_title, current_groups, sections
+        nonlocal current_title, current_groups, sections, current_goals
         if current_title and current_groups:
             sections.append((current_title, current_groups))
         current_groups = []
+        current_goals = None
 
-    for raw_line in lines:
-        line = raw_line.rstrip("\n").strip()
+    for raw in lines:
+        line = raw.strip()
         if not line:
             continue
 
         if is_section_heading(line):
             flush_group()
             flush_section()
-            current_title = line.strip()
+            current_title = line
             continue
 
+        # 1) Legacy input: "1. ..." start altijd een nieuwe groep
         if NUMBER_RE.match(line):
-            # nieuwe groep => later nieuw lijstitem (Enter)
             flush_group()
-            current_group = [strip_source_rank_number(line)]
+            stripped = strip_source_rank_number(line)
+            current_group = [stripped]
+            m = GOALS_RE.search(stripped)
+            current_goals = int(m.group(1)) if m else None
+            continue
+
+        # 2) Huidige input: groepeer op goals-wissel
+        m = GOALS_RE.search(line)
+        if m:
+            goals = int(m.group(1))
+            if current_goals is None:
+                # Eerste goals in deze sectie
+                flush_group()
+                current_group = [line]
+                current_goals = goals
+            elif goals != current_goals:
+                # Nieuw aantal goals => nieuw lijstitem (Enter)
+                flush_group()
+                current_group = [line]
+                current_goals = goals
+            else:
+                # Zelfde goals, maar deze regel bevat ook het suffix => dezelfde groep
+                if not current_group:
+                    current_group = [line]
+                else:
+                    current_group.append(line)
         else:
+            # Geen goals suffix: hoort bij huidige groep (Shift+Enter)
             if not current_group:
-                # defensief: als de bron geen "1." heeft, bouw dan toch een groep
+                # Defensief: start toch een groep zodat we geen regels verliezen
                 current_group = [line]
             else:
                 current_group.append(line)
@@ -174,7 +224,7 @@ def _new_numbering_numid_for_section(doc: Document, bold_number: bool = True) ->
         rpr.append(b)
         lvl.append(rpr)
 
-    # Inspringing: kleine indent zoals standaard lijst
+    # Inspringing (net als standaard lijst)
     ppr = OxmlElement("w:pPr")
     ind = OxmlElement("w:ind")
     ind.set(qn("w:left"), "720")     # ~0.5 inch
@@ -228,22 +278,21 @@ def topscorers_text_to_docx_bytes(text: str) -> bytes:
 
     Structuur:
     - Sectiekop: aparte paragraaf
-    - Daarna: per groep één genummerde paragraaf (Enter => nieuw item)
-      - groep[0] als eerste regel (regular tekst)
-      - groep[1:] als extra regels met Shift+Enter (soft breaks) binnen hetzelfde item
+    - Daarna: per goals-groep één genummerde paragraaf (Enter => nieuw item)
+      - group[0] als eerste regel (regular tekst)
+      - group[1:] als extra regels met Shift+Enter binnen hetzelfde item
     """
     doc = Document()
     sections = parse_sections(text)
 
     for title, groups in sections:
         # Sectiekop
-        # (Heading 3 is meestal een nette subkop. Als je template anders wil: pas hier aan.)
         doc.add_paragraph(title, style="Heading 3")
 
         # Robuuste herstart: nieuw numId per sectie
         num_id = _new_numbering_numid_for_section(doc, bold_number=True)
 
-        # Belangrijk: één paragraaf per groep (Enter => nieuw nummer)
+        # Eén paragraaf per groep (nieuw nummer per nieuw goals-aantal)
         for group in groups:
             if not group:
                 continue
@@ -259,8 +308,6 @@ def topscorers_text_to_docx_bytes(text: str) -> bytes:
                 br = p.add_run()
                 br.add_break()  # soft line break (Shift+Enter)
                 p.add_run(extra_line)
-
-        # optioneel: geen extra lege paragraaf; jij wilt "één paragraaf per groep"
 
     buf = BytesIO()
     doc.save(buf)
@@ -278,18 +325,20 @@ def extract_text_from_upload(raw: bytes, filename: str) -> str:
             tmp.write(raw)
             tmp.flush()
             doc = Document(tmp.name)
-            lines: List[str] = []
 
+            lines: List[str] = []
             for p in doc.paragraphs:
-                if p.text.strip():
-                    lines.append(p.text)
+                t = p.text.strip()
+                if t:
+                    lines.append(t)
 
             for table in doc.tables:
                 for row in table.rows:
                     for cell in row.cells:
                         for ln in cell.text.splitlines():
-                            if ln.strip():
-                                lines.append(ln)
+                            t = ln.strip()
+                            if t:
+                                lines.append(t)
 
             return "\n".join(lines)
 
