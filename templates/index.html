@@ -93,11 +93,10 @@
           <button type="submit" class="btn btn-primary btn-like">Maak CUE export (.txt)</button>
         </form>
 
-        <!-- verborgen opslag voor gekeerde tekst -->
         <textarea id="regiosport-output" class="visually-hidden" aria-hidden="true"></textarea>
 
         <div class="actions actions--bottom">
-          <a class="btn btn-outline" href="/static/docs/Uitslagen%20regiosport%20202-2026%20definitief.xlsx" download>
+          <a class="btn btn-outline" href="/static/docs/REG_uitslagen_regiosport_2025-2026.xlsx" download>
             Download leeg invoerdocument
           </a>
           <button class="btn btn-outline copy-btn" data-target="regiosport-output">
@@ -112,7 +111,7 @@
         <section class="card">
           <div class="card__head">
             <h3>Amateurvoetbal: topscorers &gt; Cue Web</h3>
-            <p>Upload hier het tekstbestand (Word) met de topscorers. Je krijgt dan een Word-document waarvan je de inhoud direct als tekst in Cue Web kunt plakken.</p>
+            <p>Upload hier het tekstbestand (Word of Kladblok) met de topscorers. Je krijgt dan een Word-document waarvan je de inhoud direct als tekst in Cue Web kunt plakken.</p>
           </div>
 
           <form action="/convert/topscorers" method="post" enctype="multipart/form-data"
@@ -147,20 +146,26 @@
 
         // RFC 5987 / RFC 6266: filename*=UTF-8''...
         const star = cd.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
-        if (star && star[1]) {
-          try { return decodeURIComponent(star[1].trim()); } catch(e) { return star[1].trim(); }
+        if (star && star[1]){
+          try { return decodeURIComponent(star[1]); } catch(e) { return star[1]; }
         }
 
-        const normal = cd.match(/filename\s*=\s*"?([^";]+)"?/i);
-        return normal && normal[1] ? normal[1].trim() : null;
+        // fallback: filename="..."
+        const basic = cd.match(/filename\s*=\s*"([^"]+)"/i);
+        if (basic && basic[1]) return basic[1];
+
+        return null;
       }
 
       function yyyymmddAmsterdam(){
-        // Gebruik Europe/Amsterdam zodat de datum gelijk loopt met de server.
+        const now = new Date();
         const parts = new Intl.DateTimeFormat('nl-NL', {
-          year: 'numeric', month: '2-digit', day: '2-digit',
-          timeZone: 'Europe/Amsterdam'
-        }).formatToParts(new Date());
+          timeZone: 'Europe/Amsterdam',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit'
+        }).formatToParts(now);
+
         const y = parts.find(p => p.type === 'year')?.value || '1970';
         const m = parts.find(p => p.type === 'month')?.value || '01';
         const d = parts.find(p => p.type === 'day')?.value || '01';
@@ -185,171 +190,82 @@
 
       function isDocxResponse(res){
         const ct = (res.headers.get('Content-Type') || '').toLowerCase();
-        return ct.includes('application/vnd.openxmlformats-officedocument.wordprocessingml.document')
-          || ct.includes('officedocument.wordprocessingml.document');
+        return ct.includes('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
       }
 
       function downloadBlob(blob, filename){
-        const url  = URL.createObjectURL(blob);
-        const a    = document.createElement("a");
-        a.href = url; a.download = filename;
-        document.body.appendChild(a); a.click();
-        setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename || 'export';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
       }
 
-      // File-knop: groene state bij file-selectie
-      document.querySelectorAll('[data-filepicker] input[type="file"]').forEach(input => {
-        input.addEventListener('change', () => {
-          const wrap = input.closest('[data-filepicker]');
-          wrap?.classList.toggle('selected', input.files && input.files.length > 0);
-        });
-      });
+      async function handleConvertForm(form){
+        const targetId = form.getAttribute('data-target');
+        const target = targetId ? document.getElementById(targetId) : null;
+        if (target) target.value = '';
 
-      // Intercepteer submit: download zelf en sla (waar zinvol) op in verborgen textarea
-      document.querySelectorAll("form.js-convert").forEach(form => {
-        form.addEventListener("submit", async (e) => {
+        const fd = new FormData(form);
+        const res = await fetch(form.action, { method: 'POST', body: fd });
+
+        if (!res.ok){
+          const msg = await res.text();
+          alert(msg || 'Converteren is mislukt.');
+          return;
+        }
+
+        const fname = filenameFromContentDisposition(res) || fallbackFilenameForAction(form.action) || form.getAttribute('data-filename') || 'export';
+
+        if (isDocxResponse(res)){
+          const blob = await res.blob();
+          downloadBlob(blob, fname);
+          return;
+        }
+
+        const text = await res.text();
+        if (target) target.value = text;
+
+        // Automatisch downloaden als tekst (voor txt converters)
+        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+        downloadBlob(blob, fname);
+      }
+
+      document.querySelectorAll('form.js-convert').forEach(form => {
+        form.addEventListener('submit', (e) => {
           e.preventDefault();
-          const submitBtn = form.querySelector('button[type="submit"]');
-          const targetId  = form.dataset.target;
-          const fileInput = form.querySelector('input[type="file"]');
-          const fallbackFilename  = fallbackFilenameForAction(form.action) || form.dataset.filename || "export.txt";
-          if (!fileInput?.files?.length) { alert("Kies eerst een bestand."); return; }
-
-          submitBtn.disabled = true;
-          const originalText = submitBtn.textContent;
-          submitBtn.textContent = "Bezig…";
-
-          try {
-            const fd = new FormData(form);
-            const res = await fetch(form.action, { method: "POST", body: fd });
-
-            if (!res.ok) {
-              // Probeer fout als tekst te tonen
-              let msg = "";
-              try { msg = await res.text(); } catch(e) {}
-              alert(msg || "Er ging iets mis. Controleer je upload.");
-              submitBtn.textContent = originalText;
-              return;
-            }
-
-            // Bestandsnaam: server > fallback
-            const filename = filenameFromContentDisposition(res) || fallbackFilename;
-
-            const ta = document.getElementById(targetId);
-            if (ta) ta.dataset.filename = filename;
-
-            document.querySelectorAll(`.download-btn[data-target="${targetId}"]`).forEach(b => {
-              b.dataset.filename = filename;
-            });
-
-            // DOCX: binary behandelen (geen res.text())
-            if (isDocxResponse(res)) {
-              const blob = await res.blob();
-
-              // Bewaar blob voor 'Download'-knop, maar geen tekst in textarea
-              if (ta) {
-                ta.value = ""; // copy/paste heeft hier geen zin
-                // Bewaar blob tijdelijk in memory via een object URL
-                // (alleen voor de sessie; geen opslag)
-                if (ta.dataset.blobUrl) {
-                  try { URL.revokeObjectURL(ta.dataset.blobUrl); } catch(e) {}
-                }
-                ta.dataset.blobUrl = URL.createObjectURL(blob);
-              }
-
-              downloadBlob(blob, filename);
-
-              submitBtn.textContent = "Klaar!";
-              setTimeout(() => submitBtn.textContent = originalText, 1500);
-              return;
-            }
-
-            // Tekst (default): in textarea + download als .txt
-            const text = await res.text();
-
-            if (ta) ta.value = text;
-
-            const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-            downloadBlob(blob, filename);
-
-            submitBtn.textContent = "Klaar!";
-            setTimeout(() => submitBtn.textContent = originalText, 1500);
-          } catch (err) {
-            alert("Er ging iets mis tijdens het converteren: " + err);
-          } finally {
-            submitBtn.disabled = false;
-          }
+          handleConvertForm(form);
         });
       });
 
-      // Kopieer direct de code
-      document.querySelectorAll(".copy-btn").forEach(btn => {
-        btn.addEventListener("click", async () => {
-          const targetId = btn.dataset.target;
-          const outputEl = document.getElementById(targetId);
-          if (!outputEl || !outputEl.value) {
-            alert("Nog geen CUE-code beschikbaar! Maak eerst de export.");
-            return;
-          }
-          try {
-            await navigator.clipboard.writeText(outputEl.value);
-            btn.textContent = "Gekopieerd!";
-            btn.style.background = "var(--ok)";
-            btn.style.color = "#fff";
-            setTimeout(() => {
-              btn.textContent = "Kopieer direct de code";
-              btn.style.background = "";
-              btn.style.color = "";
-            }, 1500);
-          } catch (err) {
-            alert("Kopiëren mislukt: " + err);
-          }
+      // "Bestand kiezen" label updaten
+      document.querySelectorAll('[data-filepicker] input[type=file]').forEach(inp => {
+        const label = inp.closest('[data-filepicker]')?.querySelector('.file__label');
+        inp.addEventListener('change', () => {
+          if (!label) return;
+          label.textContent = inp.files && inp.files[0] ? inp.files[0].name : 'Bestand kiezen';
         });
       });
 
-      // Download (client-side) vanuit verborgen textarea
-      document.querySelectorAll(".download-btn").forEach(btn => {
-        btn.addEventListener("click", () => {
-          const targetId = btn.dataset.target;
-          const outputEl = document.getElementById(targetId);
-          if (!outputEl) {
-            alert("Geen output-element gevonden.");
-            return;
+      // Copy-knoppen
+      document.querySelectorAll('.copy-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const targetId = btn.getAttribute('data-target');
+          const ta = targetId ? document.getElementById(targetId) : null;
+          if (!ta) return;
+          try{
+            await navigator.clipboard.writeText(ta.value || '');
+            alert('Gekopieerd.');
+          } catch(e){
+            ta.select();
+            document.execCommand('copy');
+            alert('Gekopieerd.');
           }
-
-          const filename = outputEl.dataset.filename || btn.dataset.filename || "export.txt";
-
-          // Als er een docx blob-url is opgeslagen: gebruik die
-          if (outputEl.dataset.blobUrl && filename.toLowerCase().endsWith(".docx")) {
-            const a = document.createElement("a");
-            a.href = outputEl.dataset.blobUrl;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            setTimeout(() => a.remove(), 0);
-            return;
-          }
-
-          // Anders: tekst downloaden
-          if (!outputEl.value) {
-            alert("Nog geen code beschikbaar! Maak eerst de export.");
-            return;
-          }
-          const blob = new Blob([outputEl.value], { type: "text/plain;charset=utf-8" });
-          downloadBlob(blob, filename);
         });
       });
-
-      // Donkere modus op tijd: actief vanaf 17:00 Europe/Amsterdam
-      function setTimedTheme(){
-        try{
-          const fmt = new Intl.DateTimeFormat('nl-NL',{hour:'numeric', hour12:false, timeZone:'Europe/Amsterdam'});
-          const hour = parseInt(fmt.formatToParts(new Date()).find(p=>p.type==='hour').value,10);
-          document.documentElement.classList.toggle('dark', hour >= 17);
-        }catch(e){}
-      }
-      setTimedTheme();
-      setInterval(setTimedTheme, 15*60*1000);
     </script>
   </body>
 </html>
