@@ -4,7 +4,7 @@ from converter_amateur import excel_to_txt_amateur
 
 # Cue Print -> Cue Web converter (Optie 1: volledige classnamen)
 from converter_amateur_online import cueprint_txt_to_docx_bytes
-from converter_topscorers import extract_text_from_upload_bytes, topscorers_text_to_cueweb_html
+from converter_topscorers import extract_text_from_upload_bytes, topscorers_text_to_docx_bytes
 
 from openpyxl import Workbook
 import io
