@@ -506,6 +506,11 @@ def parse_goals_cell(text, home_team, away_team):
             SUSPICIOUS_NAMES.add(f"bad-score:{score}")
             continue
 
+        # Negeer naam 'onbekend' (case-insensitive) in de telling, maar laat de stand doorlopen.
+        if _norm_name(name) == "onbekend":
+            prev_home, prev_away = home_goals, away_goals
+            continue
+
         scored_side = None
         steps = 0
 
@@ -647,34 +652,40 @@ def merge_totals_case_insensitive(
     goals_this_round: Dict[Tuple[str, Optional[str]], int],
     groups_for_new: Dict[Tuple[str, Optional[str]], str],
 ):
-    # Index bron op genormaliseerde naam
-    idx_before: Dict[str, List[Tuple[str, Optional[str]]]] = defaultdict(list)
+    """Voeg 'oude stand' + 'huidige ronde' samen op (naam, club).
+
+    - Naam-matching is case-insensitive (casefold) binnen dezelfde club.
+    - Club-matching is case-insensitive (casefold).
+    - Spelling uit de bron blijft leidend wanneer er een match is.
+    - Naam 'onbekend' wordt genegeerd in de telling.
+    """
+
+    # Filter 'onbekend' uit bron (voor het geval het erin staat)
+    totals_before = {
+        k: v for k, v in totals_before.items() if _norm_name(k[0]) != "onbekend"
+    }
+    meta_before = {
+        k: v for k, v in meta_before.items() if _norm_name(k[0]) != "onbekend"
+    }
+
+    def _norm_club(club: Optional[str]) -> str:
+        return _norm_name(club or "")
+
+    # Index bron op (genormaliseerde naam, genormaliseerde club)
+    idx_before: Dict[Tuple[str, str], Tuple[str, Optional[str]]] = {}
     for key in totals_before.keys():
-        idx_before[_norm_name(key[0])].append(key)
-
-    # Index ronde op genormaliseerde naam (voor ambiguïteitscheck)
-    idx_round: Dict[str, List[Tuple[str, Optional[str]]]] = defaultdict(list)
-    for key in goals_this_round.keys():
-        idx_round[_norm_name(key[0])].append(key)
-
-    # Ambiguïteit in bron: dezelfde naam meerdere keren
-    ambiguous_source = [n for n, keys in idx_before.items() if len(keys) > 1]
-    if ambiguous_source:
-        raise ConversionError(
-            "TS-CUM-005",
-            "De bron-stand bevat meerdere spelers met dezelfde naam. Pas dit aan (bijv. met extra tekst in haakjes) en probeer opnieuw.",
-        )
-
-    # Ambiguïteit in ronde (zelfde naam meerdere clubs)
-    ambiguous_round = [n for n, keys in idx_round.items() if len(keys) > 1]
-    if ambiguous_round:
-        raise ConversionError(
-            "TS-CUM-006",
-            "De uitslagen bevatten meerdere spelers met dezelfde naam. Pas dit aan (bijv. voeg club toe aan de naam) en probeer opnieuw.",
-        )
+        nk = (_norm_name(key[0]), _norm_club(key[1]))
+        if nk in idx_before:
+            # Zelfde speler (na normalisatie) komt dubbel voor binnen dezelfde club
+            raise ConversionError(
+                "TS-CUM-005",
+                "De bron-stand bevat dezelfde speler meerdere keren bij dezelfde club. Pas dit aan en probeer opnieuw.",
+            )
+        idx_before[nk] = key
 
     totals_after: Dict[Tuple[str, Optional[str]], Dict[str, Any]] = {}
 
+    # Start met bron-stand
     for key, total in totals_before.items():
         meta = meta_before.get(key, {})
         totals_after[key] = {
@@ -683,22 +694,32 @@ def merge_totals_case_insensitive(
             "extra": meta.get("extra"),
         }
 
+    # Groepen-index (voor fallback bij case-insensitive clubnaam)
+    idx_groups: Dict[Tuple[str, str], str] = {}
+    for (n, c), g in groups_for_new.items():
+        idx_groups[(_norm_name(n), _norm_club(c))] = g
+
+    # Voeg ronde toe
     for (name_round, club_round), extra_goals in goals_this_round.items():
-        nkey = _norm_name(name_round)
-        match_keys = idx_before.get(nkey, [])
-        if match_keys:
-            # Exact 1 door check hierboven
-            target_key = match_keys[0]
+        if _norm_name(name_round) == "onbekend":
+            continue
+
+        nk = (_norm_name(name_round), _norm_club(club_round))
+
+        target_key = idx_before.get(nk)
+        if target_key:
             totals_after[target_key]["goals"] += int(extra_goals)
-        else:
-            group = groups_for_new.get((name_round, club_round)) or groups_for_new.get((name_round, club_round)) or "Overig"
-            totals_after[(name_round, club_round)] = {
-                "goals": int(extra_goals),
-                "group": group,
-                "extra": None,
-            }
+            continue
+
+        group = groups_for_new.get((name_round, club_round)) or idx_groups.get(nk) or "Overig"
+        totals_after[(name_round, club_round)] = {
+            "goals": int(extra_goals),
+            "group": group,
+            "extra": None,
+        }
 
     return totals_after
+
 
 
 # ----------------------------
