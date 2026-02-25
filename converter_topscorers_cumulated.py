@@ -543,6 +543,13 @@ def parse_goals_cell(text, home_team, away_team):
     return results
 
 
+def _is_beker_marker(val: Any) -> bool:
+    """True als deze rij het begin is van de beker-sectie (bijv. cel B274 = 'BEKER')."""
+    if not isinstance(val, str):
+        return False
+    return val.strip().lower() == "beker"
+
+
 def build_rankings(ws):
     max_row = ws.max_row
     rankings = {}
@@ -563,6 +570,9 @@ def build_rankings(ws):
 
         row = header + 1
         while row <= max_row:
+            # Stop bij de beker-sectie (wordt niet meegenomen in de competitiestanden).
+            if _is_beker_marker(ws.cell(row, 2).value):
+                break
             home = ws.cell(row, 2).value
             away = ws.cell(row, 4).value
 
