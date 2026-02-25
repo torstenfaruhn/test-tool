@@ -5,6 +5,7 @@ Gecombineerde Flask‑webapp met tools:
 - **DL amateurvoetbal tool** → `/convert/amateur`
 - **Amateurvoetbal online (Cue Print → Word)** → `/convert/amateur-online`
 - **Amateurvoetbal topscorers (tekst → Word)** → `/convert/topscorers`
+- **Amateurvoetbal gecumuleerde topscorers (bron + Excel → Word)** → `/convert/topscorers-cumulated`
 - **DL regiosport tool** → `/convert/regiosport`
 
 ## Lokaal draaien

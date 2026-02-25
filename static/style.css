@@ -109,6 +109,14 @@ html,body{
   }
 }
 
+
+.card--col2{ grid-column:2; }
+@media (max-width: 920px){
+  .card--col2{ grid-column:auto; }
+  .upload--three{ grid-template-columns: 1fr; }
+}
+
+.btn:disabled, .btn[disabled]{ opacity:.55; cursor:not-allowed; }
 .card-row{
   width:100%;
   max-width:1100px;
@@ -156,6 +164,10 @@ html,body{
   gap:.9rem;
   justify-content:center;
   align-items:center;
+}
+
+.upload--three{
+  grid-template-columns: repeat(3, var(--btn-width));
 }
 @media (max-width: 520px){
   .upload{ grid-template-columns: 1fr; }

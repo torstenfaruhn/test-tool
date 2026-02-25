@@ -133,139 +133,35 @@
         </section>
 
 
+        <section class="card card--col2">
+          <div class="card__head">
+            <h3>Amateurvoetbal: gecumuleerde topscorerss &gt; Cue Web</h3>
+            <p>Upload eerst het bronbestand (Word of Kladblok) met de actuele stand van de topscorers. Upload vervolgens het uitslagendocument (Excel) van de huidige speelronde. Klik vervolgens op Maak gecumuleerde Word-export. Je krijgt dan een Word-document waarvan je de inhoud direct als tekst in Cue Web kunt plakken.</p>
+          </div>
+
+          <div class="upload upload--three js-cumulated-topscorers" data-export-action="/convert/topscorers-cumulated">
+            <label class="file btn-like" data-filepicker data-cum-upload="/upload/topscorers-cumulated/source" data-default-label="Upload topscorers (Word of Kladblok)">
+              <input type="file" name="file_source" accept=".doc,.docx,.txt" required />
+              <span class="file__label">Upload topscorers (Word of Kladblok)</span>
+            </label>
+
+            <label class="file btn-like" data-filepicker data-cum-upload="/upload/topscorers-cumulated/results" data-default-label="Upload uitslagen (Excel)">
+              <input type="file" name="file_results" accept=".xls,.xlsx" required />
+              <span class="file__label">Upload uitslagen (Excel)</span>
+            </label>
+
+            <button type="button" class="btn btn-primary btn-like" data-cum-export disabled>Maak gecumuleerde Word-export</button>
+          </div>
+
+          <p class="hint hint--center">
+            Tekst kopiëren: open het gedownloade Word-document, druk Ctrl+A en daarna Ctrl+C. Ga naar je artikel in Cue Web en plak de tekst in de broodtekst met Ctrl+V.
+          </p>
+        </section>
+
       </section>
 
 <footer>&copy; DL/MHNL 2025</footer>
     </main>
-
-    <script>
-      // Haal bestandsnaam uit Content-Disposition (server) voor dynamische naamgeving
-      function filenameFromContentDisposition(res){
-        const cd = res.headers.get('Content-Disposition') || res.headers.get('content-disposition');
-        if (!cd) return null;
-
-        // RFC 5987 / RFC 6266: filename*=UTF-8''...
-        const star = cd.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
-        if (star && star[1]){
-          try { return decodeURIComponent(star[1]); } catch(e) { return star[1]; }
-        }
-
-        // fallback: filename="..."
-        const basic = cd.match(/filename\s*=\s*"([^"]+)"/i);
-        if (basic && basic[1]) return basic[1];
-
-        return null;
-      }
-
-      function yyyymmddAmsterdam(){
-        const now = new Date();
-        const parts = new Intl.DateTimeFormat('nl-NL', {
-          timeZone: 'Europe/Amsterdam',
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit'
-        }).formatToParts(now);
-
-        const y = parts.find(p => p.type === 'year')?.value || '1970';
-        const m = parts.find(p => p.type === 'month')?.value || '01';
-        const d = parts.find(p => p.type === 'day')?.value || '01';
-        return `${y}${m}${d}`;
-      }
-
-      function fallbackFilenameForAction(action){
-        // Fallback als Content-Disposition ontbreekt.
-        // Let op: form.action is meestal een absolute URL; pak daarom pathname.
-        let path = action;
-        try { path = new URL(action).pathname; } catch(e) {}
-
-        const date = yyyymmddAmsterdam();
-        const map = {
-          '/convert/amateur': `${date}_cue_print_uitslagen_amateurs.txt`,
-          '/convert/amateur-online': `${date}_cue_word_uitslagen_amateurs.docx`,
-          '/convert/regiosport': `${date}_cue_print_uitslagen_regiosport.txt`,
-          '/convert/topscorers': `${date}_cue_word_topscorers_amateurs.docx`,
-        };
-        return map[path] || null;
-      }
-
-      function isDocxResponse(res){
-        const ct = (res.headers.get('Content-Type') || '').toLowerCase();
-        return ct.includes('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-      }
-
-      function downloadBlob(blob, filename){
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename || 'export';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-      }
-
-      async function handleConvertForm(form){
-        const targetId = form.getAttribute('data-target');
-        const target = targetId ? document.getElementById(targetId) : null;
-        if (target) target.value = '';
-
-        const fd = new FormData(form);
-        const res = await fetch(form.action, { method: 'POST', body: fd });
-
-        if (!res.ok){
-          const msg = await res.text();
-          alert(msg || 'Converteren is mislukt.');
-          return;
-        }
-
-        const fname = filenameFromContentDisposition(res) || fallbackFilenameForAction(form.action) || form.getAttribute('data-filename') || 'export';
-
-        if (isDocxResponse(res)){
-          const blob = await res.blob();
-          downloadBlob(blob, fname);
-          return;
-        }
-
-        const text = await res.text();
-        if (target) target.value = text;
-
-        // Automatisch downloaden als tekst (voor txt converters)
-        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-        downloadBlob(blob, fname);
-      }
-
-      document.querySelectorAll('form.js-convert').forEach(form => {
-        form.addEventListener('submit', (e) => {
-          e.preventDefault();
-          handleConvertForm(form);
-        });
-      });
-
-      // "Bestand kiezen" label updaten
-      document.querySelectorAll('[data-filepicker] input[type=file]').forEach(inp => {
-        const label = inp.closest('[data-filepicker]')?.querySelector('.file__label');
-        inp.addEventListener('change', () => {
-          if (!label) return;
-          label.textContent = inp.files && inp.files[0] ? inp.files[0].name : 'Bestand kiezen';
-        });
-      });
-
-      // Copy-knoppen
-      document.querySelectorAll('.copy-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          const targetId = btn.getAttribute('data-target');
-          const ta = targetId ? document.getElementById(targetId) : null;
-          if (!ta) return;
-          try{
-            await navigator.clipboard.writeText(ta.value || '');
-            alert('Gekopieerd.');
-          } catch(e){
-            ta.select();
-            document.execCommand('copy');
-            alert('Gekopieerd.');
-          }
-        });
-      });
-    </script>
+    <script src="/static/app.js" defer></script>
   </body>
 </html>
