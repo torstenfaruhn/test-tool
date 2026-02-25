@@ -148,6 +148,8 @@
   // ----------------------------
   // Gecumuleerde topscorers: 2 uploads + 1 export
   // ----------------------------
+  // Gecumuleerde topscorers (2 uploads -> export)
+  // ----------------------------
   function initCumulatedTopscorers() {
     const block = document.querySelector('.js-cumulated-topscorers');
     if (!block) return;
@@ -156,24 +158,33 @@
     const exportBtn = block.querySelector('[data-cum-export]');
     const exportAction = block.getAttribute('data-export-action');
 
+    if (!exportBtn || !exportAction || pickers.length < 2) return;
+
+    // Bewaar de originele HTML van de labels (met Stap 1/2 opmaak)
     const defaultLabelHtml = new Map();
     pickers.forEach(p => {
       const l = p.querySelector('.file__label');
       if (l) defaultLabelHtml.set(p, l.innerHTML);
     });
 
-    if (!exportBtn || !exportAction || pickers.length < 2) return;
-
     function setExportEnabled() {
       const okAll = pickers.every(p => p.classList.contains('selected'));
       exportBtn.disabled = !okAll;
+    }
+
+    function setPickerDefaultLabel(picker) {
+      const label = picker.querySelector('.file__label');
+      if (label) label.innerHTML = defaultLabelHtml.get(picker) || label.innerHTML;
     }
 
     async function uploadOne(picker) {
       const input = picker.querySelector('input[type=file]');
       if (!input || !input.files || !input.files[0]) return;
 
+      // Tijdens upload: zet status terug
       picker.classList.remove('selected');
+      picker.removeAttribute('data-uploaded-filename');
+      picker.removeAttribute('title');
       setExportEnabled();
 
       const url = picker.getAttribute('data-cum-upload');
@@ -183,58 +194,92 @@
       const fieldName = input.getAttribute('name') || 'file';
       fd.append(fieldName, input.files[0]);
 
-      const res = await fetch(url, { method: 'POST', body: fd });
+      let res;
+      try {
+        res = await fetch(url, { method: 'POST', body: fd });
+      } catch (e) {
+        input.value = '';
+        setPickerDefaultLabel(picker);
+        picker.classList.remove('selected');
+        setExportEnabled();
+        alert('Upload is mislukt.');
+        return;
+      }
 
       if (!res.ok) {
         let msg = 'Upload is mislukt.';
         try {
           const data = await res.json();
-          msg = (data && (data.message || data.code)) ? `${data.code || ''} ${data.message || ''}`.trim() : msg;
+          msg = (data && (data.message || data.code))
+            ? `${data.code || ''} ${data.message || ''}`.trim()
+            : msg;
         } catch (e) {
           try { msg = await res.text(); } catch (e2) {}
         }
-        // reset input
+
         input.value = '';
-        const label = picker.querySelector('.file__label');
-        const defaultLabel = picker.getAttribute('data-default-label');
-        if (label) label.innerHTML = defaultLabelHtml.get(picker) || (defaultLabel || 'Bestand kiezen');
+        setPickerDefaultLabel(picker);
         picker.classList.remove('selected');
+        picker.removeAttribute('data-uploaded-filename');
+        picker.removeAttribute('title');
         setExportEnabled();
         alert(msg);
         return;
       }
 
-      // succes: markeer picker
+      // Succes: markeer groen + bewaar bestandsnaam (tooltip)
       picker.classList.add('selected');
+      picker.setAttribute('data-uploaded-filename', input.files[0].name);
+      picker.setAttribute('title', input.files[0].name);
+
+      // Laat de knoptekst staan als "Stap 1/2..." (geen bestandsnaam in knop)
+      setPickerDefaultLabel(picker);
+
       setExportEnabled();
     }
 
     function resetUI() {
       pickers.forEach(p => {
         p.classList.remove('selected');
+        p.removeAttribute('data-uploaded-filename');
+        p.removeAttribute('title');
+
         const input = p.querySelector('input[type=file]');
         if (input) input.value = '';
-        const label = p.querySelector('.file__label');
-        const defaultLabel = p.getAttribute('data-default-label');
-        if (label) label.innerHTML = defaultLabelHtml.get(p) || (defaultLabel || 'Bestand kiezen');
+
+        setPickerDefaultLabel(p);
       });
       exportBtn.disabled = true;
     }
 
-        pickers.forEach(picker => {
+    // Upload direct na kiezen bestand
+    pickers.forEach(picker => {
       const input = picker.querySelector('input[type=file]');
       if (!input) return;
       input.addEventListener('change', () => {
         if (!input.files || !input.files[0]) return;
-
-        const label = picker.querySelector('.file__label');
-        if (label) label.textContent = input.files[0].name;
-
         uploadOne(picker);
       });
     });
 
-    const msg = await res.text();
+    // Export: server gebruikt de 2 eerder geüploade bestanden (sessie)
+    exportBtn.addEventListener('click', async () => {
+      if (exportBtn.disabled) return;
+
+      exportBtn.disabled = true;
+
+      let res;
+      try {
+        res = await fetch(exportAction, { method: 'POST' });
+      } catch (e) {
+        resetUI();
+        alert('Converteren is mislukt.');
+        return;
+      }
+
+      if (!res.ok) {
+        let msg = 'Converteren is mislukt.';
+        try { msg = await res.text(); } catch (e) {}
         resetUI();
         alert(msg || 'Converteren is mislukt.');
         return;
@@ -249,7 +294,11 @@
       downloadBlob(blob, fname);
       resetUI();
     });
+
+    // Init
+    resetUI();
   }
+
 
   initCumulatedTopscorers();
 })();
