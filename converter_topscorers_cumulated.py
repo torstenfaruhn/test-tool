@@ -556,6 +556,9 @@ def build_rankings(ws):
 
     header_rows = []
     for r in range(1, max_row + 1):
+        # Stop met zoeken naar divisie-tabellen zodra de beker-sectie start.
+        if _is_beker_marker(ws.cell(r, 2).value):
+            break
         if (
             isinstance(ws.cell(r, 2).value, str)
             and ws.cell(r, 2).value
