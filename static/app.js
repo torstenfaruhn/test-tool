@@ -156,6 +156,12 @@
     const exportBtn = block.querySelector('[data-cum-export]');
     const exportAction = block.getAttribute('data-export-action');
 
+    const defaultLabelHtml = new Map();
+    pickers.forEach(p => {
+      const l = p.querySelector('.file__label');
+      if (l) defaultLabelHtml.set(p, l.innerHTML);
+    });
+
     if (!exportBtn || !exportAction || pickers.length < 2) return;
 
     function setExportEnabled() {
@@ -191,7 +197,7 @@
         input.value = '';
         const label = picker.querySelector('.file__label');
         const defaultLabel = picker.getAttribute('data-default-label');
-        if (label) label.textContent = defaultLabel || 'Bestand kiezen';
+        if (label) label.innerHTML = defaultLabelHtml.get(picker) || (defaultLabel || 'Bestand kiezen');
         picker.classList.remove('selected');
         setExportEnabled();
         alert(msg);
@@ -210,28 +216,25 @@
         if (input) input.value = '';
         const label = p.querySelector('.file__label');
         const defaultLabel = p.getAttribute('data-default-label');
-        if (label) label.textContent = defaultLabel || 'Bestand kiezen';
+        if (label) label.innerHTML = defaultLabelHtml.get(p) || (defaultLabel || 'Bestand kiezen');
       });
       exportBtn.disabled = true;
     }
 
-    pickers.forEach(picker => {
+        pickers.forEach(picker => {
       const input = picker.querySelector('input[type=file]');
       if (!input) return;
       input.addEventListener('change', () => {
         if (!input.files || !input.files[0]) return;
+
+        const label = picker.querySelector('.file__label');
+        if (label) label.textContent = input.files[0].name;
+
         uploadOne(picker);
       });
     });
 
-    exportBtn.addEventListener('click', async () => {
-      exportBtn.disabled = true;
-
-      const res = await fetch(exportAction, { method: 'POST' });
-
-      // Na exportpoging resetten (server ruimt altijd op)
-      if (!res.ok) {
-        const msg = await res.text();
+    const msg = await res.text();
         resetUI();
         alert(msg || 'Converteren is mislukt.');
         return;

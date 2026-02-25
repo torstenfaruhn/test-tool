@@ -169,6 +169,66 @@ html,body{
 .upload--three{
   grid-template-columns: repeat(3, var(--btn-width));
 }
+
+/* ---------- Gecumuleerde topscorers (stappen + pijl) ---------- */
+.upload--cumulated-steps{
+  /* overschrijft de standaard grid-layout van .upload */
+  display:flex;
+  flex-direction:column;
+  gap:.55rem;
+  justify-content:center;
+  align-items:center;
+}
+
+.upload--cumulated-steps .upload__row{
+  display:grid;
+  grid-template-columns: repeat(2, var(--btn-width));
+  gap:.9rem;
+  justify-content:center;
+  width: calc((var(--btn-width) * 2) + .9rem);
+}
+
+.upload--cumulated-steps .upload__arrow{
+  color:var(--muted);
+  font-size:1.35rem;
+  line-height:1;
+  margin:.05rem 0;
+}
+
+.upload--cumulated-steps .upload__cta{
+  width: calc((var(--btn-width) * 2) + .9rem);
+  min-width:0;
+}
+
+/* vaste knophoogte + nette 2-regels layout */
+.upload--cumulated-steps .file,
+.upload--cumulated-steps .btn{
+  height:56px;
+  padding:.45rem .75rem;
+  white-space:normal;
+  font-size:.9rem;
+  line-height:1.05;
+}
+
+.upload--cumulated-steps .file .file__label .step{
+  font-weight:800;
+}
+
+.upload--cumulated-steps .file .file__label .sub{
+  font-weight:600;
+  font-size:.9em;
+  opacity:.95;
+}
+
+@media (max-width: 520px){
+  .upload--cumulated-steps .upload__row{
+    grid-template-columns: 1fr;
+    width:100%;
+  }
+  .upload--cumulated-steps .upload__cta{
+    width:100%;
+  }
+}
 @media (max-width: 520px){
   .upload{ grid-template-columns: 1fr; }
 }

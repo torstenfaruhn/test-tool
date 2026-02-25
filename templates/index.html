@@ -139,20 +139,23 @@
             <p>Upload eerst het bronbestand (Word of Kladblok) met de actuele stand van de topscorers. Upload vervolgens het uitslagendocument (Excel) van de huidige speelronde. Klik vervolgens op Maak gecumuleerde Word-export. Je krijgt dan een Word-document waarvan je de inhoud direct als tekst in Cue Web kunt plakken.</p>
           </div>
 
-          <div class="upload upload--three js-cumulated-topscorers" data-export-action="/convert/topscorers-cumulated">
-            <label class="file btn-like" data-filepicker data-cum-upload="/upload/topscorers-cumulated/source" data-default-label="Upload topscorers (Word of Kladblok)">
-              <input type="file" name="file_source" accept=".doc,.docx,.txt" required />
-              <span class="file__label">Upload topscorers (Word of Kladblok)</span>
-            </label>
+          <div class="upload upload--cumulated-steps js-cumulated-topscorers" data-export-action="/convert/topscorers-cumulated">
+            <div class="upload__row">
+              <label class="file btn-like" data-cum-upload="/upload/topscorers-cumulated/source" data-default-label="Stap 1: Upload topscorers (Word/Kladblok)">
+                <input type="file" name="file_source" accept=".doc,.docx,.txt" required />
+                <span class="file__label"><span class="step">Stap 1:</span> Upload topscorers<br><span class="sub">(Word/Kladblok)</span></span>
+              </label>
 
-            <label class="file btn-like" data-filepicker data-cum-upload="/upload/topscorers-cumulated/results" data-default-label="Upload uitslagen (Excel)">
-              <input type="file" name="file_results" accept=".xls,.xlsx" required />
-              <span class="file__label">Upload uitslagen (Excel)</span>
-            </label>
+              <label class="file btn-like" data-cum-upload="/upload/topscorers-cumulated/results" data-default-label="Stap 2: Upload uitslagen (Excel)">
+                <input type="file" name="file_results" accept=".xls,.xlsx" required />
+                <span class="file__label"><span class="step">Stap 2:</span> Upload uitslagen<br><span class="sub">(Excel)</span></span>
+              </label>
+            </div>
 
-            <button type="button" class="btn btn-primary btn-like" data-cum-export disabled>Maak gecumuleerde Word-export</button>
+            <div class="upload__arrow" aria-hidden="true">↓</div>
+
+            <button type="button" class="btn upload__cta" data-cum-export disabled>Stap 3: Maak gecumuleerde Word-export</button>
           </div>
-
           <p class="hint hint--center">
             Tekst kopiëren: open het gedownloade Word-document, druk Ctrl+A en daarna Ctrl+C. Ga naar je artikel in Cue Web en plak de tekst in de broodtekst met Ctrl+V.
           </p>
