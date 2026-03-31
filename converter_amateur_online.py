@@ -33,6 +33,9 @@ _TAG_PATTERN = re.compile(
     re.DOTALL | re.IGNORECASE,
 )
 
+# Vang zowel <EP> als varianten zoals <EP,1> af.
+_EP_PATTERN = re.compile(r"<EP(?:,\d+)?>", re.IGNORECASE)
+
 
 @dataclass(frozen=True)
 class _Token:
@@ -47,11 +50,21 @@ class _Item:
     facts: Optional[str]  # None als leeg/ontbrekend
 
 
+def _clean_token_text(value: str) -> str:
+    """Normaliseer tag-inhoud en verwijder EP-markers uit de inhoud."""
+    text = (value or "").replace("\r\n", "\n").replace("\r", "\n")
+    text = _EP_PATTERN.sub(" ", text)
+    text = re.sub(r"[ \t\f\v]+", " ", text)
+    text = re.sub(r" *\n+ *", "\n", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
 def _extract_tokens(raw: str) -> List[_Token]:
     tokens: List[_Token] = []
     for m in _TAG_PATTERN.finditer(raw or ""):
         kind = (m.group(1) or "").lower().strip()
-        text = (m.group(2) or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+        text = _clean_token_text(m.group(2) or "")
         tokens.append(_Token(kind=kind, text=text))
     return tokens
 
