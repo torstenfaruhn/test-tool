@@ -133,6 +133,26 @@
         </section>
 
 
+        <section class="card">
+          <div class="card__head">
+            <h3>Amateurvoetbal: mutaties &gt; Cue Print</h3>
+            <p>Upload het Excelbestand (.xlsx) met de mutaties. Klik daarna op de knop hieronder. Je krijgt dan een txt-bestand dat je in Cue Print (Codefixer) moet plakken.</p>
+          </div>
+
+          <form action="/convert/amateur-mutaties" method="post" enctype="multipart/form-data"
+                class="upload js-convert"
+                data-target="amateur-mutaties-output"
+                data-filename="cue_export_mutaties_amateur.txt">
+            <label class="file btn-like" data-filepicker>
+              <input type="file" name="file_amateur_mutaties" accept=".xlsx" required />
+              <span class="file__label">Bestand kiezen</span>
+            </label>
+            <button type="submit" class="btn btn-primary btn-like">Maak CUE export (.txt)</button>
+          </form>
+
+          <textarea id="amateur-mutaties-output" class="visually-hidden" aria-hidden="true"></textarea>
+        </section>
+
         <section class="card card--col2">
           <div class="card__head">
             <h3>Amateurvoetbal:<br> gecumuleerde topscorers &gt; Cue Web</h3>

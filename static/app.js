@@ -44,6 +44,7 @@
     const date = yyyymmddAmsterdam();
     const map = {
       '/convert/amateur': `${date}_cue_print_uitslagen_amateurs.txt`,
+      '/convert/amateur-mutaties': `${date}_cue_print_mutaties_amateurs.txt`,
       '/convert/amateur-online': `${date}_cue_word_uitslagen_amateurs.docx`,
       '/convert/regiosport': `${date}_cue_print_uitslagen_regiosport.txt`,
       '/convert/topscorers': `${date}_cue_word_topscorers_amateurs.docx`,

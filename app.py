@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, Response, abort, jsonify, make_response
 from converter_regiosport import excel_to_txt_regiosport
 from converter_amateur import excel_to_txt_amateur
+from converter_amateur_mutaties import excel_to_txt_mutaties
 
 # Cue Print -> Cue Web converter
 from converter_amateur_online import cueprint_txt_to_docx_bytes
@@ -53,6 +54,7 @@ AMATEUR_ONLINE_OUTPUT_PATTERN = "{date}_cue_word_uitslagen_amateurs.docx"
 REGIOSPORT_OUTPUT_PATTERN = "{date}_cue_print_uitslagen_regiosport.txt"
 TOPSCORERS_OUTPUT_PATTERN = "{date}_cue_word_topscorers_amateurs.docx"
 TOPSCORERS_CUMULATED_OUTPUT_PATTERN = "{date}_cue_word_gecumuleerde_topscorers_amateurs.docx"
+MUTATIES_OUTPUT_PATTERN = "{date}_cue_print_mutaties_amateurs.txt"
 
 
 def _sanitize_stem(filename: str) -> str:
@@ -216,6 +218,29 @@ def convert_amateur():
         return abort(400, f"Kon Amateur-bestand niet verwerken: {e}")
 
     out_name = _build_output_filename(AMATEUR_OUTPUT_PATTERN, file.filename or "")
+    return Response(
+        txt,
+        mimetype="text/plain; charset=utf-8",
+        headers={"Content-Disposition": _content_disposition_attachment(out_name)},
+    )
+
+
+@app.post("/convert/amateur-mutaties")
+def convert_amateur_mutaties():
+    file = request.files.get("file_amateur_mutaties")
+    if not file or file.filename == "":
+        return abort(400, "Geen bestand geüpload (Amateurvoetbal mutaties).")
+
+    filename = file.filename or ""
+    if not filename.lower().endswith(".xlsx"):
+        return abort(400, "Verkeerd bestandstype. Upload een .xlsx-bestand.")
+
+    try:
+        txt = excel_to_txt_mutaties(file.read())
+    except Exception as e:
+        return abort(400, f"Kon mutatiebestand niet verwerken: {e}")
+
+    out_name = _build_output_filename(MUTATIES_OUTPUT_PATTERN, filename)
     return Response(
         txt,
         mimetype="text/plain; charset=utf-8",
