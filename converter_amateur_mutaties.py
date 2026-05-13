@@ -19,6 +19,14 @@ RANK_ORDER = {
 }
 
 
+# Kolomindeling bron-Excel met extra kolommen P en Q voor assistent-trainer.
+CLUB_COLUMN = "G"
+DIVISION_COLUMN = "H"
+TRAINER_COLUMN = "L"
+NEW_PLAYERS_COLUMNS = ("T", "AF")
+DEPARTED_PLAYERS_COLUMNS = ("AG", "AS")
+
+
 def clean_whitespace(text: str) -> str:
     text = str(text or "")
     text = text.replace("\r", "\n").replace("\xa0", " ")
@@ -232,14 +240,14 @@ def excel_to_txt_mutaties(file_bytes: bytes) -> str:
             continue
 
         row = rows[row_number]
-        club = clean_whitespace(row.get("G", ""))
-        division = clean_whitespace(row.get("H", ""))
+        club = clean_whitespace(row.get(CLUB_COLUMN, ""))
+        division = clean_whitespace(row.get(DIVISION_COLUMN, ""))
         if not club or not division:
             continue
 
-        trainer = strip_trailing_periods(clean_whitespace(row.get("L", "")))
-        nieuwe_spelers = join_player_fields([row.get(col, "") for col in col_range("R", "AD")])
-        vertrokken_spelers = join_player_fields([row.get(col, "") for col in col_range("AE", "AQ")])
+        trainer = strip_trailing_periods(clean_whitespace(row.get(TRAINER_COLUMN, "")))
+        nieuwe_spelers = join_player_fields([row.get(col, "") for col in col_range(*NEW_PLAYERS_COLUMNS)])
+        vertrokken_spelers = join_player_fields([row.get(col, "") for col in col_range(*DEPARTED_PLAYERS_COLUMNS)])
 
         items.append(
             {

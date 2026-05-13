@@ -48,6 +48,9 @@ De webapp gebruikt hiervoor:
 
 De converter:
 - leest alleen het eerste werkblad uit een `.xlsx`-bestand;
+- gebruikt kolommen `T` t/m `AF` voor nieuwe spelers;
+- gebruikt kolommen `AG` t/m `AS` voor vertrokken spelers;
+- laat de nieuwe assistent-trainerkolommen `P` en `Q` buiten de Cue Print-uitvoer;
 - gebruikt dezelfde normalisaties als het notebook;
 - groepeert op divisie/klasse;
 - houdt de sortering uit het notebook aan;
