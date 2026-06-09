@@ -3,7 +3,7 @@ import re
 import zipfile
 import xml.etree.ElementTree as ET
 from collections import defaultdict, OrderedDict
-from typing import Dict, List
+from typing import Dict, List, Optional, Set
 
 
 NS = {
@@ -26,6 +26,98 @@ TRAINER_COLUMN = "L"
 NEW_PLAYERS_COLUMNS = ("T", "AF")
 DEPARTED_PLAYERS_COLUMNS = ("AG", "AS")
 
+# Clubs in deze lijst worden volledig overgeslagen in de output.
+# Laat de lijst leeg als je niets wilt uitsluiten.
+# Vul clubnamen exact in zoals ze in kolom G van het Excelbestand staan.
+# Hoofdletters en dubbele spaties maken niet uit.
+#
+# Voorbeeld:
+# EXCLUDED_CLUBS = (
+#     "Achilles Veen",
+#     "ADO'20",
+#     "AFC",
+#     "Always Forward",
+#     "Astrantia",
+#     "ASWH",
+#     "AWC",
+#     "Baronie",
+#     "Bavel",
+#     "Beerse Boys",
+#     "Best Vooruit",
+#     "Bladella",
+#     "Blauw Geel'38/JUMBO",
+#     "Boekel Sport",
+#     "Boerdonk",
+#     "Bruheze",
+#     "Budel",
+#     "Constantia",
+#     "De Middenpeel",
+#     "De Valk",
+#     "De Zwaluw",
+#     "Deurne",
+#     "Dongen",
+#     "DSV",
+#     "DWSH'18",
+#     "EFC",
+#     "Excellent",
+#     "FC Eindhoven 2",
+#     "FC Lisse",
+#     "FC Tilburg",
+#     "FSG",
+#     "Gemert",
+#     "Goes",
+#     "Hapse Boys",
+#     "Hoogland",
+#     "HVCH",
+#     "Juliana Mill",
+#     "Juliana'31",
+#     "Kloetinge",
+#     "Lierop",
+#     "Liessel",
+#     "LRC",
+#     "Mariahout",
+#     "MASV",
+#     "Mierlo Hout",
+#     "Mifano",
+#     "Moerse Boys",
+#     "Neerkandia",
+#     "Noordwijk",
+#     "Nuenen",
+#     "Nuenen 2",
+#     "OJC Rosmalen",
+#     "Olympia Boys",
+#     "Orion",
+#     "Prinses Irene",
+#     "RBC",
+#     "Rijnvogels",
+#     "Rood Wit'62",
+#     "Sambeek",
+#     "SC Gastel",
+#     "Scheveningen",
+#     "SJVV",
+#     "Someren",
+#     "SSS’18",
+#     "SteDoCo",
+#     "Sterksel",
+#     "Stiphout Vooruit",
+#     "SV de Braak",
+#     "SV Someren",
+#     "SV Valkenswaard",
+#     "SVS",
+#     "TOGB",
+#     "Toxandria",
+#     "UDI'19",
+#     "UNA",
+#     "Unitas'30",
+#     "Venhorst",
+#     "VIOS'38",
+#     "Volharding",
+#     "VVSB",
+#     "Zwaluwen",
+# )
+EXCLUDED_CLUBS = (
+)
+
 
 def clean_whitespace(text: str) -> str:
     text = str(text or "")
@@ -33,6 +125,23 @@ def clean_whitespace(text: str) -> str:
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r" *\n *", "\n", text)
     return text.strip()
+
+
+def normalize_club_for_exclude(club_name: str) -> str:
+    return clean_whitespace(club_name).casefold()
+
+
+def build_exclude_set(extra_exclude_clubs: Optional[List[str]] = None) -> Set[str]:
+    clubs = list(EXCLUDED_CLUBS)
+
+    if extra_exclude_clubs:
+        clubs.extend(extra_exclude_clubs)
+
+    return {
+        normalized
+        for normalized in (normalize_club_for_exclude(club) for club in clubs)
+        if normalized
+    }
 
 
 def strip_trailing_periods(text: str) -> str:
@@ -231,8 +340,9 @@ def class_sort_key(label: str) -> tuple:
     return (2, 99, normalized)
 
 
-def excel_to_txt_mutaties(file_bytes: bytes) -> str:
+def excel_to_txt_mutaties(file_bytes: bytes, exclude_clubs: Optional[List[str]] = None) -> str:
     rows = load_first_sheet_rows(file_bytes)
+    exclude_set = build_exclude_set(exclude_clubs)
     items = []
 
     for row_number in sorted(rows):
@@ -243,6 +353,9 @@ def excel_to_txt_mutaties(file_bytes: bytes) -> str:
         club = clean_whitespace(row.get(CLUB_COLUMN, ""))
         division = clean_whitespace(row.get(DIVISION_COLUMN, ""))
         if not club or not division:
+            continue
+
+        if normalize_club_for_exclude(club) in exclude_set:
             continue
 
         trainer = strip_trailing_periods(clean_whitespace(row.get(TRAINER_COLUMN, "")))
