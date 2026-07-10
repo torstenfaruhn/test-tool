@@ -219,7 +219,7 @@ LIMBURG_CLUBS = {
     'VV Kessel',
     'VV Maastricht West',
     'VV Schaesberg',
-    'VVV'03',
+    "VVV'03",
     'Walram',
     'WDZ',
     'Weltania',
