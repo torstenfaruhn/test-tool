@@ -111,7 +111,7 @@ LIMBURG_CLUBS = {
     'H.B.S.V.',
     'Haelen',
     'Haslou',
-    'HBC'09',
+    "HBC'09",
     'Heer',
     'Hegelsom',
     'Heijen',
