@@ -3,7 +3,7 @@ import re
 import zipfile
 import xml.etree.ElementTree as ET
 from collections import defaultdict, OrderedDict
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Tuple
 
 
 NS = {
@@ -19,149 +19,11 @@ RANK_ORDER = {
 }
 
 
-# Kolomindeling bron-Excel met extra kolommen P en Q voor assistent-trainer.
-CLUB_COLUMN = "G"
-DIVISION_COLUMN = "H"
-TRAINER_COLUMN = "L"
-NEW_PLAYERS_COLUMNS = ("T", "AF")
-DEPARTED_PLAYERS_COLUMNS = ("AG", "AS")
-
 # Clubs in deze lijst worden volledig overgeslagen in de output.
 # Laat de lijst leeg als je niets wilt uitsluiten.
-# Vul clubnamen exact in zoals ze in kolom G van het Excelbestand staan.
-# Hoofdletters en dubbele spaties maken niet uit.
-#
-# Voorbeeld:
-# EXCLUDED_CLUBS = (
-#     "Achilles Veen",
-#     "ADO'20",
-#     "AFC",
-#     "Always Forward",
-#     "Astrantia",
-#     "ASWH",
-#     "AWC",
-#     "Baronie",
-#     "Bavel",
-#     "Bavos",
-#     "Beerse Boys VR1",
-#     "Best Vooruit",
-#     "Bladella",
-#     "Blauw Geel'38/JUMBO",
-#     "Boekel Sport",
-#     "Boerdonk",
-#     "Bruheze",
-#     "Budel",
-#     "Constantia",
-#     "De Middenpeel",
-#     "De Mortel",
-#     "De Valk",
-#     "De Zwaluw",
-#     "Deurne",
-#     "Dongen",
-#     "DOSL",
-#     "DSV",
-#     "DWSH'18",
-#     "Erp",
-#     "EFC",
-#     "Excellent",
-#     "Ecelsior M",
-#     "FC De Rakt",
-#     "FC Eindhoven 2",
-#     "FC Eindhoven AV VR2",
-#     "FC Eindhoven AV VR3",
-#     "FC Lisse",
-#     "FC Tilburg VR1",
-#     "Gemert",
-#     "Goes",
-#     "Handel",
-#     "Hapse Boys",
-#     "Juliana Mill",
-#     "Hoogland",
-#     "HVCH",
-#     "Juliana'31",
-#     "Kampong", 
-#     "Kloetinge",
-#     "Lierop",
-#     "Liessel",
-#     "LRC",
-#     "LSV",
-#     "Maarheeze",
-#     "Mariahout",
-#     "MASV",
-#     "Mierlo-Hout",
-#     "Mifano",
-#     "Milheezer Boys",
-#     "Moerse Boys VR1",
-#     "Neerkandia",
-#     "Noordwijk",
-#     "Odiliapeel",
-#     "OJC Rosmalen",
-#     "Olympia Boys",
-#     "Olympia'18",
-#     "ONDO",
-#     "Orion",
-#     "Prinses Irene",
-#     "RBC",
-#     "Rijnvogels",
-#     "RKSV Nuenen VR1",
-#     "RKSV Nuenen VR2",
-#     "RKVV Keldonk",
-#     "Roda Boys",
-#     "Rood Wit'62",
-#     "Rood Wit'67",
-#     "Sambeek",
-#     "Sarto",
-#     "SCMH",
-#     "SES",
-#     "SC Gastel VR1",
-#     "Scheveningen",
-#     "SJVV",
-#     "Someren",
-#     "Sportclub Loosbroek",
-#     "SPV",
-#     "SSA/SJO VBS'25",
-#     "SSE",
-#     "SSS’18",
-#     "SSS’18 VR1",
-#     "SteDoCo",
-#     "SV Brandevoort",
-#     "Sterksel",
-#     "Stiphout Vooruit",
-#     "SV De Braak",
-#     "SV De Middenpeel",
-#     "SV Someren",
-#     "SV Olland",
-#     "SV Poortugaal:",
-#     "SV Someren",
-#     "SV Someren VR1",
-#     "SV Valkenswaard",
-#     "SVS",
-#     "SVSH",
-#     "TOGB",
-#     "Toxandria",
-#     "UDI'19",
-#     "UDI'19 VR1",
-#     "UNA",
-#     "VCO",
-#     "VDZ VR1",
-#     "VESTA'19",
-#     "Unitas'30",
-#     "Venhorst",
-#     "VIOS'38",
-#     "VIVOO VR1",
-#     "Vorstenbossche Boys",
-#     "VV Bavel VR1",
-#     "VV Bavel VR2",
-#     "VV Hoogland VR1",
-#     "Volharding",
-#     "VVSB",
-#     "WNC",
-#     "ZSV",
-#     "ZVV Zaandijk VR1",
-#     "Zwaluwen",
-# )
-EXCLUDED_CLUBS = (
-)
+# Clubnamen worden bij vergelijking hoofdletterongevoelig behandeld
+# en dubbele spaties maken niet uit.
+EXCLUDED_CLUBS: Tuple[str, ...] = ()
 
 
 def clean_whitespace(text: str) -> str:
@@ -170,6 +32,17 @@ def clean_whitespace(text: str) -> str:
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r" *\n *", "\n", text)
     return text.strip()
+
+
+def normalize_header(text: str) -> str:
+    """
+    Maak een kolomkop geschikt voor betrouwbare vergelijking.
+
+    Excel/Forms kan onder meer non-breaking spaces, regeleinden en
+    verschillende hoofdletters gebruiken. Die verschillen zijn voor
+    kolomherkenning niet relevant.
+    """
+    return clean_whitespace(text).casefold()
 
 
 def normalize_club_for_exclude(club_name: str) -> str:
@@ -227,13 +100,24 @@ def normalize_plain_entry(entry: str) -> List[str]:
     if "," not in entry:
         return [normalize_existing_parenthetical_entry(entry)]
 
-    tokens = [strip_trailing_periods(token.strip()) for token in entry.split(",") if token.strip()]
+    tokens = [
+        strip_trailing_periods(token.strip())
+        for token in entry.split(",")
+        if token.strip()
+    ]
     if not tokens:
         return []
 
-    if len(tokens) >= 3 and tokens[-1].lower().startswith("allen ") and all(len(token.split()) >= 2 for token in tokens[:-1]):
+    if (
+        len(tokens) >= 3
+        and tokens[-1].lower().startswith("allen ")
+        and all(len(token.split()) >= 2 for token in tokens[:-1])
+    ):
         club = normalize_country_parens(tokens[-1].strip("() "))
-        return [f"{strip_trailing_periods(name)} ({club})" for name in tokens[:-1]]
+        return [
+            f"{strip_trailing_periods(name)} ({club})"
+            for name in tokens[:-1]
+        ]
 
     if len(tokens) == 2:
         name = tokens[0]
@@ -273,6 +157,7 @@ def normalize_cell_value(cell_value: str) -> List[str]:
         if not part:
             continue
         items.extend(normalize_plain_entry(part))
+
     return [item for item in items if item]
 
 
@@ -283,25 +168,9 @@ def join_player_fields(values: List[str]) -> str:
     return ", ".join(items) if items else "niemand"
 
 
-def col_range(start: str, end: str) -> List[str]:
-    def to_num(col: str) -> int:
-        number = 0
-        for char in col:
-            number = number * 26 + ord(char) - 64
-        return number
-
-    def to_col(number: int) -> str:
-        result = ""
-        while number:
-            number, remainder = divmod(number - 1, 26)
-            result = chr(65 + remainder) + result
-        return result
-
-    return [to_col(i) for i in range(to_num(start), to_num(end) + 1)]
-
-
 def _read_shared_strings(workbook: zipfile.ZipFile) -> List[str]:
     shared_strings: List[str] = []
+
     if "xl/sharedStrings.xml" not in workbook.namelist():
         return shared_strings
 
@@ -309,21 +178,35 @@ def _read_shared_strings(workbook: zipfile.ZipFile) -> List[str]:
     for item in shared_root.findall("a:si", NS):
         parts = [node.text or "" for node in item.iterfind(".//a:t", NS)]
         shared_strings.append("".join(parts))
+
     return shared_strings
 
 
 def load_first_sheet_rows(file_bytes: bytes) -> Dict[int, Dict[str, str]]:
+    """
+    Lees het eerste werkblad rechtstreeks uit de .xlsx-container.
+
+    De functie retourneert per rijnummer een dictionary:
+    {"A": "waarde", "B": "waarde", ...}.
+    """
     try:
         workbook = zipfile.ZipFile(io.BytesIO(file_bytes))
     except zipfile.BadZipFile as exc:
-        raise RuntimeError("Kon Excelbestand niet openen. Upload een geldig .xlsx-bestand.") from exc
+        raise RuntimeError(
+            "Kon Excelbestand niet openen. Upload een geldig .xlsx-bestand."
+        ) from exc
 
     try:
         shared_strings = _read_shared_strings(workbook)
-        if "xl/worksheets/sheet1.xml" not in workbook.namelist():
-            raise RuntimeError("Het eerste werkblad ontbreekt in het Excelbestand.")
 
-        sheet_root = ET.fromstring(workbook.read("xl/worksheets/sheet1.xml"))
+        if "xl/worksheets/sheet1.xml" not in workbook.namelist():
+            raise RuntimeError(
+                "Het eerste werkblad ontbreekt in het Excelbestand."
+            )
+
+        sheet_root = ET.fromstring(
+            workbook.read("xl/worksheets/sheet1.xml")
+        )
         rows: Dict[int, Dict[str, str]] = defaultdict(dict)
 
         for cell in sheet_root.findall(".//a:sheetData/a:row/a:c", NS):
@@ -338,10 +221,21 @@ def load_first_sheet_rows(file_bytes: bytes) -> Dict[int, Dict[str, str]]:
             value_node = cell.find("a:v", NS)
             inline_node = cell.find("a:is", NS)
 
-            if cell_type == "s" and value_node is not None and value_node.text is not None:
-                value = shared_strings[int(value_node.text)]
+            if (
+                cell_type == "s"
+                and value_node is not None
+                and value_node.text is not None
+            ):
+                shared_index = int(value_node.text)
+                if 0 <= shared_index < len(shared_strings):
+                    value = shared_strings[shared_index]
+                else:
+                    value = ""
             elif cell_type == "inlineStr" and inline_node is not None:
-                value = "".join(node.text or "" for node in inline_node.iterfind(".//a:t", NS))
+                value = "".join(
+                    node.text or ""
+                    for node in inline_node.iterfind(".//a:t", NS)
+                )
             elif value_node is not None and value_node.text is not None:
                 value = value_node.text
             else:
@@ -350,12 +244,128 @@ def load_first_sheet_rows(file_bytes: bytes) -> Dict[int, Dict[str, str]]:
             rows[row_number][column] = value
 
         return rows
+
     except RuntimeError:
         raise
     except Exception as exc:
         raise RuntimeError("Kon het Excelbestand niet lezen.") from exc
     finally:
         workbook.close()
+
+
+def column_sort_key(column: str) -> int:
+    """Zet Excel-kolomletters om naar een getal voor sortering."""
+    number = 0
+    for char in column:
+        number = number * 26 + ord(char) - 64
+    return number
+
+
+def find_exact_header(
+    headers: Dict[str, str],
+    expected_header: str,
+) -> str:
+    expected = normalize_header(expected_header)
+
+    matches = [
+        column
+        for column, value in headers.items()
+        if normalize_header(value) == expected
+    ]
+
+    if len(matches) == 1:
+        return matches[0]
+
+    if not matches:
+        raise RuntimeError(
+            f"Verplichte kolom ontbreekt: '{expected_header}'. "
+            "Controleer of dit het juiste Forms/Excel-bestand is."
+        )
+
+    raise RuntimeError(
+        f"Kolomkop '{expected_header}' komt meerdere keren voor. "
+        "De converter kan daardoor niet veilig bepalen welke kolom bedoeld is."
+    )
+
+
+def find_player_columns(
+    headers: Dict[str, str],
+    regular_prefix: str,
+    extra_prefix: str,
+    description: str,
+) -> List[str]:
+    """
+    Zoek alle spelerkolommen aan de hand van hun kolomkop.
+
+    Hiermee is de converter niet meer afhankelijk van vaste letters zoals
+    T:AF of AG:AS. Een extra of ontbrekende metadata-kolom vóór de
+    spelersvelden verschuift de gegevens dan niet meer.
+    """
+    regular = normalize_header(regular_prefix)
+    extra = normalize_header(extra_prefix)
+
+    columns = []
+
+    for column, value in headers.items():
+        header = normalize_header(value)
+
+        if header.startswith(regular) or header.startswith(extra):
+            columns.append(column)
+
+    columns.sort(key=column_sort_key)
+
+    if not columns:
+        raise RuntimeError(
+            f"Geen kolommen voor {description} gevonden. "
+            "Controleer of de kolomkoppen van het Excelbestand nog "
+            "overeenkomen met het formulier."
+        )
+
+    return columns
+
+
+def detect_column_layout(
+    rows: Dict[int, Dict[str, str]]
+) -> Tuple[str, str, str, List[str], List[str]]:
+    """
+    Bepaal de benodigde bronkolommen op basis van de kopteksten in rij 1.
+
+    De oude converter gebruikte vaste kolomletters. Microsoft Forms/Excel
+    kan echter metadata-kolommen toevoegen of weglaten, waardoor alle
+    kolommen daarna opschuiven. Door de kopteksten te gebruiken blijft de
+    mapping correct.
+    """
+    headers = rows.get(1, {})
+    if not headers:
+        raise RuntimeError(
+            "De kopregel in rij 1 ontbreekt in het Excelbestand."
+        )
+
+    club_column = find_exact_header(headers, "Naam vereniging")
+    division_column = find_exact_header(headers, "Divisie of klasse")
+    trainer_column = find_exact_header(headers, "Naam hoofdtrainer")
+
+    new_players_columns = find_player_columns(
+        headers,
+        regular_prefix="Nieuwe speler (voornaam + achternaam, club)",
+        extra_prefix="Indien nog meer nieuwe spelers",
+        description="nieuwe spelers",
+    )
+
+    departed_players_columns = find_player_columns(
+        headers,
+        regular_prefix="Vertrokken speler (voornaam + achternaam, club)",
+        extra_prefix="Indien nog meer vertrokken spelers",
+        description="vertrokken spelers",
+    )
+
+    return (
+        club_column,
+        division_column,
+        trainer_column,
+        new_players_columns,
+        departed_players_columns,
+    )
 
 
 def normalize_class_for_matching(label: str) -> str:
@@ -378,15 +388,34 @@ def class_sort_key(label: str) -> tuple:
     if normalized == "vrouwen eerste klasse d":
         return (3, 2, "")
 
-    match = re.match(r"^(eerste|tweede|derde|vierde|vijfde)\s+klasse\s+([a-z])$", normalized)
+    match = re.match(
+        r"^(eerste|tweede|derde|vierde|vijfde)\s+klasse\s+([a-z])$",
+        normalized,
+    )
     if match:
-        return (2, RANK_ORDER[match.group(1)], match.group(2))
+        return (
+            2,
+            RANK_ORDER[match.group(1)],
+            match.group(2),
+        )
 
     return (2, 99, normalized)
 
 
-def excel_to_txt_mutaties(file_bytes: bytes, exclude_clubs: Optional[List[str]] = None) -> str:
+def excel_to_txt_mutaties(
+    file_bytes: bytes,
+    exclude_clubs: Optional[List[str]] = None,
+) -> str:
     rows = load_first_sheet_rows(file_bytes)
+
+    (
+        club_column,
+        division_column,
+        trainer_column,
+        new_players_columns,
+        departed_players_columns,
+    ) = detect_column_layout(rows)
+
     exclude_set = build_exclude_set(exclude_clubs)
     items = []
 
@@ -395,17 +424,27 @@ def excel_to_txt_mutaties(file_bytes: bytes, exclude_clubs: Optional[List[str]] 
             continue
 
         row = rows[row_number]
-        club = clean_whitespace(row.get(CLUB_COLUMN, ""))
-        division = clean_whitespace(row.get(DIVISION_COLUMN, ""))
+
+        club = clean_whitespace(row.get(club_column, ""))
+        division = clean_whitespace(row.get(division_column, ""))
+
         if not club or not division:
             continue
 
         if normalize_club_for_exclude(club) in exclude_set:
             continue
 
-        trainer = strip_trailing_periods(clean_whitespace(row.get(TRAINER_COLUMN, "")))
-        nieuwe_spelers = join_player_fields([row.get(col, "") for col in col_range(*NEW_PLAYERS_COLUMNS)])
-        vertrokken_spelers = join_player_fields([row.get(col, "") for col in col_range(*DEPARTED_PLAYERS_COLUMNS)])
+        trainer = strip_trailing_periods(
+            clean_whitespace(row.get(trainer_column, ""))
+        )
+
+        nieuwe_spelers = join_player_fields(
+            [row.get(column, "") for column in new_players_columns]
+        )
+
+        vertrokken_spelers = join_player_fields(
+            [row.get(column, "") for column in departed_players_columns]
+        )
 
         items.append(
             {
@@ -418,7 +457,9 @@ def excel_to_txt_mutaties(file_bytes: bytes, exclude_clubs: Optional[List[str]] 
         )
 
     if not items:
-        raise RuntimeError("Geen verwerkbare mutaties gevonden in het Excelbestand.")
+        raise RuntimeError(
+            "Geen verwerkbare mutaties gevonden in het Excelbestand."
+        )
 
     groups = defaultdict(list)
     original_labels = OrderedDict()
@@ -428,12 +469,19 @@ def excel_to_txt_mutaties(file_bytes: bytes, exclude_clubs: Optional[List[str]] 
         groups[key].append(item)
         original_labels.setdefault(key, item["division"])
 
-    ordered_keys = sorted(groups.keys(), key=lambda key: class_sort_key(original_labels[key]))
+    ordered_keys = sorted(
+        groups.keys(),
+        key=lambda key: class_sort_key(original_labels[key]),
+    )
 
     lines = ["<body>"]
 
     for key in ordered_keys:
         label = original_labels[key]
+
+        # Bestaande Cue Print-opzet:
+        # <subhead_lead> bevat divisie/klasse.
+        # <subhead> bevat de naam van de vereniging.
         lines.append(f"<subhead_lead>{label}</subhead_lead>")
 
         for index, item in enumerate(groups[key]):
@@ -441,9 +489,18 @@ def excel_to_txt_mutaties(file_bytes: bytes, exclude_clubs: Optional[List[str]] 
                 lines.append("<EP,1>")
 
             lines.append(f"<subhead>{item['club']}</subhead>")
-            lines.append(f"<howto_facts><bold><CO,5>Nieuw: </bold>{item['nieuwe_spelers']}</howto_facts>")
-            lines.append(f"<howto_facts><bold><CO,5>Vertrokken: </bold>{item['vertrokken_spelers']}</howto_facts>")
-            lines.append(f"<howto_facts><bold><CO,5>Trainer: </bold>{item['trainer']}</howto_facts>")
+            lines.append(
+                "<howto_facts><bold><CO,5>Nieuw: </bold>"
+                f"{item['nieuwe_spelers']}</howto_facts>"
+            )
+            lines.append(
+                "<howto_facts><bold><CO,5>Vertrokken: </bold>"
+                f"{item['vertrokken_spelers']}</howto_facts>"
+            )
+            lines.append(
+                "<howto_facts><bold><CO,5>Trainer: </bold>"
+                f"{item['trainer']}</howto_facts>"
+            )
 
     lines.append("</body>")
     return "\n".join(lines)
