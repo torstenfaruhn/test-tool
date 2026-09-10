@@ -68,6 +68,22 @@ def strip_trailing_periods(text: str) -> str:
     return text.strip()
 
 
+def normalize_years_active(value: str) -> str:
+    """
+    Normaliseer het aantal jaren actief voor de club.
+
+    Excel kan een geheel getal soms als bijvoorbeeld '2.0' opslaan.
+    Voor de Cue Print-uitvoer maken we daar '2' van. Andere ingevulde
+    waarden worden ongewijzigd en zonder extra spaties doorgegeven.
+    """
+    value = clean_whitespace(value)
+
+    if re.fullmatch(r"\d+\.0+", value):
+        return value.split(".", 1)[0]
+
+    return value
+
+
 def normalize_country_parens(text: str) -> str:
     text = str(text or "").strip()
     text = re.sub(r"\s*\(([^()]+)\)\s*$", lambda m: ", " + m.group(1).strip(), text)
@@ -326,7 +342,7 @@ def find_player_columns(
 
 def detect_column_layout(
     rows: Dict[int, Dict[str, str]]
-) -> Tuple[str, str, str, List[str], List[str]]:
+) -> Tuple[str, str, str, str, List[str], List[str]]:
     """
     Bepaal de benodigde bronkolommen op basis van de kopteksten in rij 1.
 
@@ -344,6 +360,10 @@ def detect_column_layout(
     club_column = find_exact_header(headers, "Naam vereniging")
     division_column = find_exact_header(headers, "Divisie of klasse")
     trainer_column = find_exact_header(headers, "Naam hoofdtrainer")
+    trainer_years_column = find_exact_header(
+        headers,
+        "Aantal jaren actief voor club",
+    )
 
     new_players_columns = find_player_columns(
         headers,
@@ -363,6 +383,7 @@ def detect_column_layout(
         club_column,
         division_column,
         trainer_column,
+        trainer_years_column,
         new_players_columns,
         departed_players_columns,
     )
@@ -412,6 +433,7 @@ def excel_to_txt_mutaties(
         club_column,
         division_column,
         trainer_column,
+        trainer_years_column,
         new_players_columns,
         departed_players_columns,
     ) = detect_column_layout(rows)
@@ -437,6 +459,14 @@ def excel_to_txt_mutaties(
         trainer = strip_trailing_periods(
             clean_whitespace(row.get(trainer_column, ""))
         )
+        trainer_years = normalize_years_active(
+            row.get(trainer_years_column, "")
+        )
+
+        if trainer and trainer_years:
+            trainer_display = f"{trainer} ({trainer_years})"
+        else:
+            trainer_display = trainer
 
         nieuwe_spelers = join_player_fields(
             [row.get(column, "") for column in new_players_columns]
@@ -450,7 +480,7 @@ def excel_to_txt_mutaties(
             {
                 "club": club,
                 "division": division,
-                "trainer": trainer,
+                "trainer": trainer_display,
                 "nieuwe_spelers": nieuwe_spelers,
                 "vertrokken_spelers": vertrokken_spelers,
             }
