@@ -456,19 +456,29 @@ def parse_goals_cell(text, home_team, away_team):
     last_end = 0
     prev_home, prev_away = 0, 0
 
-    for match in matches:
+    for match_index, match in enumerate(matches):
         raw_name = match.group(1).strip()
         score = match.group(2)
 
         context = text[last_end : match.end(2)].lower()
         segment = text[match.start(1) : match.end(2)].lower()
-        last_end = match.end(2)
+        # Een aanduiding na de stand hoort bij deze treffer, tot aan de volgende komma.
+        # Zonder komma loopt de tekst maximaal tot de volgende herkende naam + stand.
+        next_match = matches[match_index + 1] if match_index + 1 < len(matches) else None
+        suffix_end = next_match.start(1) if next_match else len(text)
+        comma = text.find(",", match.end(2), suffix_end)
+        if comma != -1:
+            suffix_end = comma
+        suffix = text[match.end(2) : suffix_end].lower()
+        last_end = suffix_end
 
         if (
             "eigen doelpunt" in context
             or "eigen doelpunt" in segment
             or "ed." in context
             or "ed." in segment
+            or "eigen doelpunt" in suffix
+            or "ed." in suffix
         ):
             try:
                 home_goals, away_goals = map(int, score.split("-"))
