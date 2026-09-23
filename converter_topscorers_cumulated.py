@@ -229,7 +229,7 @@ LIMBURG_CLUBS = {
     'Wittenhorst',
     'Woander Forest',
     'Ysselsteyn',
-    "Zwart-Wit'19",
+    "Zwart-Wit '19",
     'Zwentibold'
 }
 
