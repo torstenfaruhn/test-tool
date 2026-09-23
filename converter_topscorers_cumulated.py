@@ -197,6 +197,7 @@ LIMBURG_CLUBS = {
     'SV Hulsberg',
     'SV Laar',
     'SV Meerssen',
+    'SV Milsbeek',
     'SV Simpelveld',
     'SV United',
     'SV Venray',
