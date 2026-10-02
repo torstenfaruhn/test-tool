@@ -60,6 +60,7 @@ LIMBURG_CLUBS = {
     'Alfa Sport',
     'America',
     'Amstenrade',
+    'Astrantia'
     'Baarlo',
     'Bekkerveld',
     'Belfeldia',
