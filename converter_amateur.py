@@ -1,35 +1,3 @@
-import io
-import pandas as pd
-import numpy as np
-
-# ----------------------------
-# Helpers
-# ----------------------------
-
-def to_clean_str(x):
-    if pd.isna(x):
-        return ""
-    return str(x).strip()
-
-def parse_int_safe(s):
-    try:
-        if s is None:
-            return None
-        s = str(s).strip()
-        if s == "":
-            return None
-        return int(float(s.replace(",", ".")))
-    except Exception:
-        return None
-
-# ----------------------------
-# AANGEPAST: alleen INVOER-tabblad inlezen
-# ----------------------------
-def load_all_sheets(filebytes: bytes) -> pd.DataFrame:
-    """Lees alleen tabblad 'INVOER' (geen FORMULE meer)."""
-    xls = pd.ExcelFile(io.BytesIO(filebytes))
-    frames = []
-    for sheet in xls.sheet_names:
         if sheet != "INVOER":
             continue
         df = pd.read_excel(io.BytesIO(filebytes), sheet_name=sheet, header=0)
@@ -128,7 +96,11 @@ def excel_to_txt_amateur(file_bytes: bytes) -> str:
             emitted_div = True
 
         hg_text = to_clean_str(hg_raw)
-        postponed = ("afg" in hg_text.lower()) or ("gest" in hg_text.lower())
+        postponed = (
+            ("afg" in hg_text.lower())
+            or ("gest" in hg_text.lower())
+            or (hg_text.lower() == "uitg.")
+        )
         hg_num = parse_int_safe(hg_raw)
         ag_num = parse_int_safe(ag_raw)
 
