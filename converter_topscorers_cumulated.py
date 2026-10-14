@@ -83,7 +83,7 @@ LIMBURG_CLUBS = {
     'DES Swalmen',
     'DESM',
     'DEV-Arcen',
-    "DFO'20",
+    "DFO '20",
     "DVC'16",
     'DVO',
     'Eijsden',
