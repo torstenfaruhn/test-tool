@@ -98,7 +98,7 @@ LIMBURG_CLUBS = {
     'FC Kerkrade-West',
     'FC Landgraaf',
     'FC Maasgouw',
-    'FC Ooda',
+    'FC Oda',
     'FC RIA',
     'FC Roerdalen',
     'FCV-Venlo',
