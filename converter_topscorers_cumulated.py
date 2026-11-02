@@ -72,7 +72,7 @@ LIMBURG_CLUBS = {
     'BSV Limburgia',
     'Bunde',
     'Caesar',
-    'Centrum Boys'
+    'Centrum Boys',
     'Chevremont',
     "Conventus'03",
     'Daalhof',
